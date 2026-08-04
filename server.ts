@@ -579,59 +579,19 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// 安全登录认证模块 (账号密码存储在服务端环境变量或服务端持久化文件，彻底避免代码中硬编码)
-const AUTH_FILE_PATH = path.join(process.cwd(), '.auth_credentials.json');
-
-function getAuthCredentials() {
-  try {
-    if (fs.existsSync(AUTH_FILE_PATH)) {
-      const data = JSON.parse(fs.readFileSync(AUTH_FILE_PATH, 'utf-8'));
-      if (data.account && data.password) {
-        return { account: data.account, password: data.password };
-      }
-    }
-  } catch (e) {
-    console.warn('[Auth] Read credentials file failed, fallback to env');
-  }
-  return {
-    account: process.env.ADMIN_USER || 'admin',
-    password: process.env.ADMIN_PASS || '12345'
-  };
-}
-
-function saveAuthCredentials(account: string, password: string) {
-  try {
-    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify({ account, password }), 'utf-8');
-  } catch (e) {
-    console.error('[Auth] Save credentials file failed:', e);
-  }
-}
-
+// 云端 D1 认证要求说明：系统已取消本地文件及 Env 环境变量写死验证，完全基于 Cloudflare D1 数据库
 app.post("/api/auth/login", (req, res) => {
-  const { account, password } = req.body || {};
-  const current = getAuthCredentials();
-
-  if (account === current.account && password === current.password) {
-    return res.json({ success: true, message: "登录成功" });
-  } else {
-    return res.status(401).json({ success: false, error: "账号或密码不正确，请重新输入" });
-  }
+  return res.status(400).json({
+    success: false,
+    error: "项目已完全接入 Cloudflare D1 数据库！请在前端点击“绑定 Cloudflare D1 数据库”输入您的 Worker 服务链接。"
+  });
 });
 
 app.post("/api/auth/change-password", (req, res) => {
-  const { oldPassword, newAccount, newPassword } = req.body || {};
-  const current = getAuthCredentials();
-
-  if (oldPassword !== current.password) {
-    return res.status(400).json({ success: false, error: "原密码验证不正确！" });
-  }
-
-  if (!newAccount || !newAccount.trim() || !newPassword || !newPassword.trim()) {
-    return res.status(400).json({ success: false, error: "新账号和新密码不能为空！" });
-  }
-
-  saveAuthCredentials(newAccount.trim(), newPassword.trim());
-  return res.json({ success: true, message: "账号和密码重置成功！请使用新凭证登录。" });
+  return res.status(400).json({
+    success: false,
+    error: "修改密码已接入 Cloudflare D1 数据库！请在前端输入框处绑定您的 Cloudflare D1 Worker 域名进行实时全域修改。"
+  });
 });
 
 app.get("/api/ai/env-config", (req, res) => {

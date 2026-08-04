@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Lock, User, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, Check, Loader2 } from 'lucide-react';
+import { BookOpen, Lock, User, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, Check, Loader2, Database } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
@@ -22,9 +22,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [isResetting, setIsResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 本地/静态部署回退凭证
-  const getStoredAccount = () => localStorage.getItem('ai_novel_studio_account') || 'admin';
-  const getStoredPassword = () => localStorage.getItem('ai_novel_studio_password') || '12345';
+  // Cloudflare Worker / 云端 API 配置 modal
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [cloudApiUrl, setCloudApiUrl] = useState(() => localStorage.getItem('ai_novel_studio_cloud_api_url') || '');
+
+  // 获取请求的基础 URL (优先使用 Cloudflare Worker API, 其次使用相对路径)
+  const getApiEndpoint = (path: string) => {
+    const customUrl = localStorage.getItem('ai_novel_studio_cloud_api_url') || (import.meta as any).env?.VITE_CLOUD_API_URL;
+    if (customUrl) {
+      const baseUrl = customUrl.replace(/\/+$/, '');
+      const cleanPath = path.startsWith('/') ? path : '/' + path;
+      return `${baseUrl}${cleanPath}`;
+    }
+    return path;
+  };
+
+  // 移除本地硬编码回退凭证，所有验证完全请求数据库 API
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +52,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const endpoint = getApiEndpoint('/api/auth/login');
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -59,17 +73,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           triggerShake();
           return;
         }
-      }
-      throw new Error('Server API not available');
-    } catch (err) {
-      // 静态托管环境 (如 GitHub Pages 无 Node 后端) 降级使用本地凭证验证
-      if (accountInput.trim() === getStoredAccount() && passwordInput === getStoredPassword()) {
-        localStorage.setItem('ai_novel_studio_auth_logged_in', 'true');
-        onLoginSuccess();
       } else {
-        setErrorMessage('账号或密码不正确，请重新输入');
+        const errorData = await response.json().catch(() => ({}));
+        setErrorMessage(errorData.error || '账号或密码不正确，请重新输入');
         triggerShake();
+        return;
       }
+    } catch (err) {
+      console.error('Login request failed:', err);
+      setErrorMessage('连接数据库 API 失败，请检查 Cloudflare D1 数据库绑定或网络');
+      triggerShake();
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +115,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsResetting(true);
 
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const endpoint = getApiEndpoint('/api/auth/change-password');
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,9 +129,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！请使用新凭证登录。' });
-          localStorage.setItem('ai_novel_studio_account', resetNewAccount.trim());
-          localStorage.setItem('ai_novel_studio_password', resetNewPass.trim());
+          setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！全球同步已生效。' });
           setTimeout(() => {
             setShowResetModal(false);
             setResetOldPass('');
@@ -131,28 +143,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           setResetMsg({ type: 'error', text: data.error || '原密码验证失败！' });
           return;
         }
-      }
-      throw new Error('Server API not available');
-    } catch (err) {
-      // 静态托管环境（如 GitHub Pages）回退到本地 localStorage 修改
-      if (resetOldPass !== getStoredPassword()) {
-        setResetMsg({ type: 'error', text: '原密码验证不正确！' });
       } else {
-        localStorage.setItem('ai_novel_studio_account', resetNewAccount.trim());
-        localStorage.setItem('ai_novel_studio_password', resetNewPass.trim());
-        setResetMsg({ type: 'success', text: '账号密码修改成功！请使用新凭证登录。' });
-        setTimeout(() => {
-          setShowResetModal(false);
-          setResetOldPass('');
-          setResetNewAccount('');
-          setResetNewPass('');
-          setResetConfirmPass('');
-          setResetMsg(null);
-        }, 1500);
+        const errorData = await response.json().catch(() => ({}));
+        setResetMsg({ type: 'error', text: errorData.error || '修改密码失败，请核对原密码！' });
+        return;
       }
+    } catch (err) {
+      console.error('Change password request failed:', err);
+      setResetMsg({ type: 'error', text: '请求数据库 API 失败，请检查 Cloudflare D1 数据库连接配置！' });
     } finally {
       setIsResetting(false);
     }
+  };
+
+  const handleSaveApiUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cloudApiUrl.trim()) {
+      localStorage.setItem('ai_novel_studio_cloud_api_url', cloudApiUrl.trim());
+    } else {
+      localStorage.removeItem('ai_novel_studio_cloud_api_url');
+    }
+    setShowApiModal(false);
+    alert('Cloudflare API 云端数据库链接已保存！现在多端/多人将直接同步此数据库。');
+  };
+
+  const handleDisconnectApi = () => {
+    localStorage.removeItem('ai_novel_studio_cloud_api_url');
+    setCloudApiUrl('');
+    setShowApiModal(false);
   };
 
   return (
@@ -259,18 +277,43 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
-        {/* Footer info & Modify Password Button */}
+        {/* Footer info & Modify Password / Cloud API Settings */}
         <div className="mt-6 pt-5 border-t border-stone-100 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setShowResetModal(true);
-              setResetNewAccount('');
-            }}
-            className="text-xs text-stone-500 hover:text-amber-700 font-medium underline flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <KeyRound className="w-3 h-3" /> 修改账号或密码
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setShowResetModal(true);
+                setResetNewAccount('');
+              }}
+              className="text-xs text-stone-500 hover:text-amber-700 font-medium underline flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <KeyRound className="w-3 h-3" /> 修改账号或密码
+            </button>
+            <span className="text-stone-300">|</span>
+            <button
+              type="button"
+              onClick={() => setShowApiModal(true)}
+              className="text-xs text-stone-500 hover:text-amber-700 font-medium underline flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Database className="w-3 h-3" /> 绑定 Cloudflare D1 数据库
+            </button>
+          </div>
+          {cloudApiUrl && (
+            <div className="text-[10px] text-emerald-700 font-medium bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-2">
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> 已连接 Cloudflare D1 云端数据库
+              </span>
+              <button
+                type="button"
+                onClick={handleDisconnectApi}
+                className="text-[10px] text-stone-500 hover:text-red-600 underline font-normal cursor-pointer ml-1 transition-colors"
+                title="断开云端数据库连接"
+              >
+                断开连接
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -365,6 +408,65 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 >
                   {isResetting ? '保存中...' : '保存修改'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cloudflare D1 / Worker API 配置 Modal */}
+      {showApiModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-2 border-b border-stone-100 pb-3">
+              <Database className="w-5 h-5 text-amber-600" />
+              <h3 className="text-base font-bold text-stone-900">绑定 Cloudflare D1 云端数据库 Worker</h3>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              部署在 GitHub Pages 纯静态网页时，为让多台电脑能同步使用与修改你的 Cloudflare D1 数据库密码，请输入绑定的 Worker API 域名：
+            </p>
+
+            <form onSubmit={handleSaveApiUrl} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-stone-600 uppercase mb-1">Worker API 服务链接</label>
+                <input
+                  type="url"
+                  value={cloudApiUrl}
+                  onChange={(e) => setCloudApiUrl(e.target.value)}
+                  placeholder="https://xs-auth.your-name.workers.dev"
+                  className="w-full p-2.5 rounded-lg border border-stone-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+                <p className="text-[10px] text-stone-400 mt-1">留空表示使用当前网站相对路径或本地方案。</p>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <div>
+                  {cloudApiUrl && (
+                    <button
+                      type="button"
+                      onClick={handleDisconnectApi}
+                      className="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                    >
+                      断开连接
+                    </button>
+                  )}
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowApiModal(false)}
+                    className="px-3 py-1.5 border border-stone-300 rounded-lg text-stone-600 text-xs font-medium hover:bg-stone-50 cursor-pointer"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    保存配置
+                  </button>
+                </div>
               </div>
             </form>
           </div>
