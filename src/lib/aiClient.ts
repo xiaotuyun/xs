@@ -271,14 +271,31 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
 
   if (testRes.success) {
     const text = testRes.response || '';
+    let parsedData: any = null;
+    if (path.includes('outline') || path.includes('recast')) {
+      try {
+        let cleanText = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
+        const firstBrace = cleanText.indexOf('{');
+        const lastBrace = cleanText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          cleanText = cleanText.substring(firstBrace, lastBrace + 1);
+        }
+        parsedData = JSON.parse(cleanText);
+      } catch (e) {
+        console.warn('Failed to parse JSON from AI response in static mode:', e);
+      }
+    }
+
     return {
       success: true,
+      data: parsedData || {},
       text,
       reply: text,
       content: text,
       outline: text,
       chapters: text,
-      volumes: text,
+      volumes: parsedData?.volumes || parsedData?.newVolumes || [],
+      ...parsedData,
     };
   } else {
     return { success: false, error: testRes.error || 'AI 请求失败' };
