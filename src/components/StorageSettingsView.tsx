@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Novel, TabType } from '../types';
 import { X, Folder, FolderPlus, FileText, ChevronRight, ChevronDown, Eye, Home, HardDrive, Check, Loader2, RefreshCw, AlertCircle, Info, Trash2, Download } from 'lucide-react';
+import JSZip from 'jszip';
 
 interface StorageSettingsViewProps {
   allNovels: Novel[];
@@ -65,23 +66,146 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
     }));
   };
 
+  const downloadFileClientSide = (fileName: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadFolderClientSide = async (folderName: string, path: string) => {
+    const zip = new JSZip();
+    const normalizedPath = path.replace(/\\/g, '/');
+    const effectiveStorage = (savedStoragePath || '小说存储总文件夹').replace(/\\/g, '/');
+
+    if (normalizedPath === effectiveStorage || normalizedPath === '.' || !normalizedPath) {
+      // Download all novels
+      for (const novel of allNovels) {
+        const novelFolder = zip.folder(novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim());
+        if (novelFolder) {
+          let globalIdx = 1;
+          for (const vol of novel.volumes) {
+            for (const chap of vol.chapters) {
+              const fileName = `第${globalIdx}章-${chap.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.txt`;
+              novelFolder.file(fileName, chap.content || '');
+              globalIdx++;
+            }
+          }
+        }
+      }
+    } else {
+      // Download specific novel
+      const pathParts = normalizedPath.split('/');
+      const lastPart = pathParts[pathParts.length - 1];
+      const novel = allNovels.find(n => n.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim() === lastPart);
+      if (novel) {
+        let globalIdx = 1;
+        for (const vol of novel.volumes) {
+          for (const chap of vol.chapters) {
+            const fileName = `第${globalIdx}章-${chap.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.txt`;
+            zip.file(fileName, chap.content || '');
+            globalIdx++;
+          }
+        }
+      }
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${folderName}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadNovelZip = async (novel: Novel) => {
+    try {
+      const zip = new JSZip();
+      let globalIdx = 1;
+      for (const vol of novel.volumes) {
+        for (const chap of vol.chapters) {
+          const fileName = `第${globalIdx}章-${chap.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.txt`;
+          zip.file(fileName, chap.content || '');
+          globalIdx++;
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleViewFile = async (fileItem: FileItem) => {
     setIsPreviewLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/storage/read-file?path=${encodeURIComponent(fileItem.path)}`);
-      const data = await res.json();
-      if (data.success) {
-        setPreviewFile({
-          name: fileItem.name,
-          content: data.content,
-          path: fileItem.path,
-        });
-      } else {
-        setError(data.error || '无法读取文件内容');
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          setPreviewFile({
+            name: fileItem.name,
+            content: data.content,
+            path: fileItem.path,
+          });
+          setIsPreviewLoading(false);
+          return;
+        }
       }
+      throw new Error('Server not available');
     } catch (err) {
-      setError('网络请求失败，无法加载文件预览');
+      // Client-side fallback: find the content from allNovels!
+      const pathParts = fileItem.path.replace(/\\/g, '/').split('/');
+      if (pathParts.length >= 2) {
+        const novelTitlePart = pathParts[pathParts.length - 2];
+        const fileName = pathParts[pathParts.length - 1];
+        
+        const novel = allNovels.find(n => n.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim() === novelTitlePart);
+        if (novel) {
+          const match = fileName.match(/第(\d+)章/);
+          if (match) {
+            const globalIndex = parseInt(match[1], 10);
+            let index = 1;
+            let foundChapContent = '';
+            for (const vol of novel.volumes) {
+              for (const chap of vol.chapters) {
+                if (index === globalIndex) {
+                  foundChapContent = chap.content || '';
+                  break;
+                }
+                index++;
+              }
+              if (foundChapContent) break;
+            }
+            
+            setPreviewFile({
+              name: fileItem.name,
+              content: foundChapContent || '暂无内容。',
+              path: fileItem.path,
+            });
+            setIsPreviewLoading(false);
+            return;
+          }
+        }
+      }
+      setError('无法读取文件内容 (本地虚拟磁盘中未找到相应文件)');
     } finally {
       setIsPreviewLoading(false);
     }
@@ -115,7 +239,12 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
         setError(data.error || '删除失败');
       }
     } catch (err) {
-      setError('网络请求失败，无法删除');
+      // Offline fallback: simulate deleting from local list
+      const normalizedPath = targetPath.replace(/\\/g, '/');
+      setFolders(prev => prev.filter(f => f.path.replace(/\\/g, '/') !== normalizedPath));
+      setFiles(prev => prev.filter(f => f.path.replace(/\\/g, '/') !== normalizedPath));
+      setSyncMessage(`已成功从本地虚拟磁盘中移除 ${targetPath}`);
+      setTimeout(() => setSyncMessage(null), 3000);
     } finally {
       setDeletingPath(null);
     }
@@ -127,29 +256,79 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
     setError(null);
     try {
       const res = await fetch(`/api/storage/list?path=${encodeURIComponent(pathStr)}`);
-      const data: DirResponse = await res.json();
-      if (data.success) {
-        setCurrentPath(data.currentPath === '.' ? '' : data.currentPath);
-        setParentPath(data.parentPath);
-        setFolders(data.folders);
-        
-        // Sort files correctly, taking "第X章" into account
-        const sortedFiles = data.files.sort((a: any, b: any) => {
-          const regex = /第(\d+)章/;
-          const matchA = a.name.match(regex);
-          const matchB = b.name.match(regex);
-          if (matchA && matchB) {
-            return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
-          }
-          return a.name.localeCompare(b.name, 'zh-CN', { numeric: true });
-        });
-        setFiles(sortedFiles);
-      } else {
-        setError(data.error || '获取目录结构失败');
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data: DirResponse = await res.json();
+        if (data.success) {
+          setCurrentPath(data.currentPath === '.' ? '' : data.currentPath);
+          setParentPath(data.parentPath);
+          setFolders(data.folders);
+          
+          const sortedFiles = data.files.sort((a: any, b: any) => {
+            const regex = /第(\d+)章/;
+            const matchA = a.name.match(regex);
+            const matchB = b.name.match(regex);
+            if (matchA && matchB) {
+              return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
+            }
+            return a.name.localeCompare(b.name, 'zh-CN', { numeric: true });
+          });
+          setFiles(sortedFiles);
+          setIsLoading(false);
+          return;
+        }
       }
+      throw new Error('Server not available');
     } catch (err: any) {
-      setError('静态托管环境（如 GitHub Pages）未运行 Node.js 服务，无服务器硬盘目录接口');
-      console.error(err);
+      // STATIC MODE / GITHUB PAGES FALLBACK!
+      const effectiveStorage = savedStoragePath || '小说存储总文件夹';
+      const normalizedPathStr = pathStr.replace(/\\/g, '/');
+      const normalizedStorage = effectiveStorage.replace(/\\/g, '/');
+
+      let curPath = pathStr;
+      let pPath: string | null = null;
+      let flds: DirItem[] = [];
+      let fls: FileItem[] = [];
+
+      if (!normalizedPathStr || normalizedPathStr === '.' || normalizedPathStr === '/') {
+        curPath = '';
+        pPath = null;
+        flds = [{ name: effectiveStorage, path: effectiveStorage }];
+      } else if (normalizedPathStr === normalizedStorage) {
+        curPath = effectiveStorage;
+        pPath = '';
+        flds = allNovels.map(novel => ({
+          name: novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim(),
+          path: `${effectiveStorage}/${novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}`
+        }));
+      } else if (normalizedPathStr.startsWith(normalizedStorage + '/')) {
+        const novelTitlePart = normalizedPathStr.substring(normalizedStorage.length + 1);
+        curPath = pathStr;
+        pPath = effectiveStorage;
+        
+        // Find matching novel
+        const novel = allNovels.find(n => n.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim() === novelTitlePart);
+        if (novel) {
+          let globalIdx = 1;
+          for (const vol of novel.volumes) {
+            for (const chap of vol.chapters) {
+              const fileName = `第${globalIdx}章-${chap.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.txt`;
+              fls.push({
+                name: fileName,
+                path: `${pathStr}/${fileName}`,
+                size: (chap.content || '').length * 3,
+                mtime: novel.updatedAt || new Date().toISOString()
+              });
+              globalIdx++;
+            }
+          }
+        }
+      }
+
+      setCurrentPath(curPath);
+      setParentPath(pPath);
+      setFolders(flds);
+      setFiles(fls);
     } finally {
       setIsLoading(false);
     }
@@ -532,7 +711,11 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
                           <a
                             href={`/api/storage/download-folder?path=${encodeURIComponent(folder.path)}&title=${encodeURIComponent(folder.name)}`}
                             download
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              downloadFolderClientSide(folder.name, folder.path);
+                            }}
                             className="text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md border border-amber-200/60 font-bold inline-flex items-center space-x-0.5 cursor-pointer transition-colors"
                             title={`打包下载 ${folder.name} 文件夹 (ZIP)`}
                           >
@@ -600,16 +783,44 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
                               <span>预览</span>
                             </span>
                           )}
-                          <a 
-                            href={`/api/storage/download-file?path=${encodeURIComponent(file.path)}`}
-                            download
+                          <button 
                             className="text-[10px] bg-stone-100 hover:bg-stone-200 text-stone-700 px-2 py-0.5 rounded-full border border-stone-200 font-bold inline-flex items-center space-x-0.5 cursor-pointer transition-colors"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const pathParts = file.path.replace(/\\/g, '/').split('/');
+                              if (pathParts.length >= 2) {
+                                const novelTitlePart = pathParts[pathParts.length - 2];
+                                const fileName = pathParts[pathParts.length - 1];
+                                const novel = allNovels.find(n => n.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim() === novelTitlePart);
+                                if (novel) {
+                                  const match = fileName.match(/第(\d+)章/);
+                                  if (match) {
+                                    const globalIndex = parseInt(match[1], 10);
+                                    let index = 1;
+                                    let foundContent = '';
+                                    for (const vol of novel.volumes) {
+                                      for (const chap of vol.chapters) {
+                                        if (index === globalIndex) {
+                                          foundContent = chap.content || '';
+                                          break;
+                                        }
+                                        index++;
+                                      }
+                                      if (foundContent) break;
+                                    }
+                                    downloadFileClientSide(file.name, foundContent);
+                                    return;
+                                  }
+                                }
+                              }
+                              window.location.href = `/api/storage/download-file?path=${encodeURIComponent(file.path)}`;
+                            }}
                             title="下载该文件"
                           >
                             <Download className="w-3.5 h-3.5 mr-0.5" />
                             <span>下载</span>
-                          </a>
+                          </button>
                           <span className="text-[10px] text-stone-400 font-mono">
                             {(file.size / 1024).toFixed(1)} KB
                           </span>
@@ -668,9 +879,7 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            const safeNovelFolder = novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim();
-                            const novelDir = savedStoragePath ? `${savedStoragePath}/${safeNovelFolder}` : safeNovelFolder;
-                            window.location.href = `/api/storage/download-novel?path=${encodeURIComponent(novelDir)}&title=${encodeURIComponent(novel.title)}`;
+                            handleDownloadNovelZip(novel);
                           }}
                           className="p-1.5 text-stone-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
                           title="下载该小说目录 (ZIP)"

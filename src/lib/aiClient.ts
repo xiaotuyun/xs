@@ -358,19 +358,31 @@ JSON 数据格式必须为：
         let chapNum = 1;
 
         for (const line of lines) {
-          if (line.includes('卷') || line.startsWith('第') && (line.includes('卷') || line.includes('篇'))) {
+          const isVolHeader = line.length < 80 && (
+            /第\s*([0-9一二三四五六七八九十百]+)\s*[卷篇]/.test(line) ||
+            /卷\s*([0-9一二三四五六七八九十百]+)/.test(line) ||
+            /Volume\s*\d+/i.test(line)
+          );
+
+          if (isVolHeader) {
             if (currentVol) volumes.push(currentVol);
             volNum = volumes.length + 1;
-            currentVol = { volumeNumber: volNum, volumeTitle: line.replace(/^[#\-*]+\s*/, ''), summary: '', chapters: [] };
+            currentVol = { volumeNumber: volNum, volumeTitle: line.replace(/^[#\-*\s]+/, ''), summary: '', chapters: [] };
             currentChap = null;
             continue;
           }
-          if (line.includes('章') || line.startsWith('第') && line.includes('章')) {
+
+          const isChapHeader = line.length < 120 && (
+            /第\s*([0-9一二三四五六七八九十百]+)\s*章/.test(line) ||
+            /Chapter\s*\d+/i.test(line)
+          );
+
+          if (isChapHeader) {
             if (!currentVol) {
-              currentVol = { volumeNumber: 1, volumeTitle: '第一卷 续接篇', summary: '', chapters: [] };
+              currentVol = { volumeNumber: 1, volumeTitle: '第一卷', summary: '', chapters: [] };
             }
             chapNum = currentVol.chapters.length + 1;
-            currentChap = { chapterNumber: chapNum, title: line.replace(/^[#\-*]+\s*/, ''), summary: '' };
+            currentChap = { chapterNumber: chapNum, title: line.replace(/^[#\-*\s]+/, ''), summary: '' };
             currentVol.chapters.push(currentChap);
             continue;
           }

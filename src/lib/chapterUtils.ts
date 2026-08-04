@@ -8,15 +8,20 @@ import { Chapter, Volume } from '../types';
 export function parseChapterNumberFromTitle(title: string): number | null {
   if (!title) return null;
 
+  let cleanTitle = title.trim();
+  // Clean markdown bold syntax, quotes, and brackets from start and end
+  cleanTitle = cleanTitle.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
+  cleanTitle = cleanTitle.replace(/^[\s"'`【#]*|[\s"'`】]*$/g, '').trim();
+
   // 1. Arabic numerals match: "第9章", "第 10 章", "4章", "Chapter 12"
-  const arabicMatch = title.match(/(?:第|Chapter|\b)\s*(\d+)\s*(?:章|\b)/i);
+  const arabicMatch = cleanTitle.match(/(?:第|Chapter|\b)\s*(\d+)\s*(?:章|\b)/i);
   if (arabicMatch && arabicMatch[1]) {
     const num = parseInt(arabicMatch[1], 10);
     if (!isNaN(num)) return num;
   }
 
   // 2. Chinese numerals match: "第四章", "第十章", "第一百二十三章"
-  const chineseMatch = title.match(/第\s*([零一二三四五六七八九十百千万0-9]+)\s*章/);
+  const chineseMatch = cleanTitle.match(/第\s*([零一二三四五六七八九十百千万0-9]+)\s*章/);
   if (chineseMatch && chineseMatch[1]) {
     const parsed = chineseToNumber(chineseMatch[1]);
     if (parsed !== null) return parsed;
@@ -72,7 +77,10 @@ function chineseToNumber(str: string): number | null {
 export function replaceChapterTitleNumber(title: string, newNumber: number): string {
   if (!title) return `第${newNumber}章`;
 
-  const trimmed = title.trim();
+  let trimmed = title.trim();
+  // Clean markdown bold syntax, quotes, and brackets from start and end
+  trimmed = trimmed.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
+  trimmed = trimmed.replace(/^[\s"'`【#]*|[\s"'`】]*$/g, '').trim();
 
   // Pattern 1: Starts with "第 [0-9一二三四五六七八九十百千]+ 章"
   const prefixRegex = /^第\s*([零一二三四五六七八九十百千万0-9]+)\s*章[\s：:\-—]*|^(?:Chapter|\b)\s*(\d+)\s*(?:章|\b)[\s：:\-—]*/i;
