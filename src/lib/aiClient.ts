@@ -284,6 +284,57 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
       } catch (e) {
         console.warn('Failed to parse JSON from AI response in static mode:', e);
       }
+
+      if (!parsedData || (!parsedData.volumes && !parsedData.newVolumes)) {
+        // Fallback robust text parser
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        const volumes: any[] = [];
+        let currentVol: any = null;
+        let currentChap: any = null;
+        let volNum = 1;
+        let chapNum = 1;
+
+        for (const line of lines) {
+          if (line.includes('卷') || line.startsWith('第') && (line.includes('卷') || line.includes('篇'))) {
+            if (currentVol) volumes.push(currentVol);
+            volNum = volumes.length + 1;
+            currentVol = { volumeNumber: volNum, volumeTitle: line.replace(/^[#\-*]+\s*/, ''), summary: '', chapters: [] };
+            currentChap = null;
+            continue;
+          }
+          if (line.includes('章') || line.startsWith('第') && line.includes('章')) {
+            if (!currentVol) {
+              currentVol = { volumeNumber: 1, volumeTitle: '第一卷 续接篇', summary: '', chapters: [] };
+            }
+            chapNum = currentVol.chapters.length + 1;
+            currentChap = { chapterNumber: chapNum, title: line.replace(/^[#\-*]+\s*/, ''), summary: '' };
+            currentVol.chapters.push(currentChap);
+            continue;
+          }
+          if (currentChap) {
+            currentChap.summary += (currentChap.summary ? ' ' : '') + line;
+          } else if (currentVol) {
+            currentVol.summary += (currentVol.summary ? ' ' : '') + line;
+          } else {
+            currentVol = { volumeNumber: 1, volumeTitle: '第一卷 续接篇', summary: line, chapters: [] };
+          }
+        }
+        if (currentVol) volumes.push(currentVol);
+        if (volumes.length === 0) {
+          volumes.push({
+            volumeNumber: 1,
+            volumeTitle: '第一卷 续接篇',
+            summary: text.slice(0, 300),
+            chapters: [{ chapterNumber: 1, title: '第1章 续接章节', summary: text.slice(0, 300) }]
+          });
+        }
+        volumes.forEach((v, vIdx) => {
+          if (!v.chapters || v.chapters.length === 0) {
+            v.chapters = [{ chapterNumber: vIdx + 1, title: `第${vIdx + 1}章 章节`, summary: v.summary || '无' }];
+          }
+        });
+        parsedData = { volumes, newVolumes: volumes };
+      }
     }
 
     if (parsedData) {
