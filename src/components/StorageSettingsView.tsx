@@ -148,7 +148,7 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
         setError(data.error || '获取目录结构失败');
       }
     } catch (err: any) {
-      setError('无法连接到服务器目录接口');
+      setError('静态托管环境（如 GitHub Pages）未运行 Node.js 服务，无服务器硬盘目录接口');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -386,9 +386,19 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
 
           {/* Error and Success messages */}
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center space-x-2 animate-shake">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+            <div className="p-4 bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs rounded-xl space-y-2">
+              <div className="flex items-center space-x-2 font-bold text-amber-800">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>服务器磁盘接口未连接（GitHub Pages 纯静态托管模式）</span>
+              </div>
+              <p className="text-stone-600 leading-relaxed pl-6 text-[11px]">
+                <strong>说明：</strong>当前应用正部署在 <strong>GitHub Pages 静态网站托管平台</strong>。GitHub Pages 仅托管静态网页（HTML/JS/CSS），不运行 Node.js 后端服务器（<code>server.ts</code>），因此无法使用服务端的 Node.js 磁盘写入和文件目录列表 API。
+              </p>
+              <div className="pl-6 pt-1 text-[11px] text-stone-700 space-y-1">
+                <p>✅ <strong>数据依然 100% 安全：</strong>在 GitHub Pages 上，您的所有小说、大纲、角色数据全都在浏览器本地（IndexedDB / LocalStorage）实时保存，刷新页面绝不丢失。</p>
+                <p>💡 <strong>如何备份与导出：</strong>您可以在右上角点击 <strong>“导入/导出”</strong> 按钮，随时一键导出全量小说的备份文件（JSON），或直接复制正文导出 TXT。</p>
+                <p>💻 <strong>若需要服务端硬盘自动同步 TXT：</strong>您可以在本地电脑运行 <code>npm run dev</code> 启动 Node.js 服务器环境，此时即可使用“服务器文件目录浏览器”功能。</p>
+              </div>
             </div>
           )}
 
