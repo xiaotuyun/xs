@@ -1,0 +1,6 @@
+{
+  "name": "小说创作工坊",
+  "description": "一个功能强大的AI驱动小说创作与生成工具，支持世界观构筑、角色设计、大纲规划、章节编写与续写",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
