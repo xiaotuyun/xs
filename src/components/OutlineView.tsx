@@ -264,7 +264,8 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
         throw new Error(data.error || '续接大纲失败');
       }
 
-      const newVolsFromAi = data.data.newVolumes || data.data.volumes || [];
+      const genData = data.data || data || {};
+      const newVolsFromAi = genData.newVolumes || genData.volumes || data.newVolumes || data.volumes || [];
       if (!Array.isArray(newVolsFromAi) || newVolsFromAi.length === 0) {
         throw new Error('AI 未能生成有效的续接分卷，请稍后重试。');
       }

@@ -286,6 +286,15 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
       }
     }
 
+    if (parsedData) {
+      if (parsedData.volumes && !parsedData.newVolumes) {
+        parsedData.newVolumes = parsedData.volumes;
+      }
+      if (parsedData.newVolumes && !parsedData.volumes) {
+        parsedData.volumes = parsedData.newVolumes;
+      }
+    }
+
     return {
       success: true,
       data: parsedData || {},
@@ -295,6 +304,7 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
       outline: text,
       chapters: text,
       volumes: parsedData?.volumes || parsedData?.newVolumes || [],
+      newVolumes: parsedData?.newVolumes || parsedData?.volumes || [],
       ...parsedData,
     };
   } else {

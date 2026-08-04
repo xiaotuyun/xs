@@ -904,6 +904,15 @@ JSON 数据格式必须为：
       resultJson = JSON.parse(text || "{}");
     }
 
+    if (resultJson) {
+      if (resultJson.volumes && !resultJson.newVolumes) {
+        resultJson.newVolumes = resultJson.volumes;
+      }
+      if (resultJson.newVolumes && !resultJson.volumes) {
+        resultJson.volumes = resultJson.newVolumes;
+      }
+    }
+
     res.json({ success: true, data: resultJson });
   } catch (error: any) {
     console.error("Extend outline error:", error);
