@@ -22,6 +22,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [isResetting, setIsResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 本地/静态部署回退凭证
+  const getStoredAccount = () => localStorage.getItem('ai_novel_studio_account') || 'admin';
+  const getStoredPassword = () => localStorage.getItem('ai_novel_studio_password') || '12345';
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -44,19 +48,28 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          localStorage.setItem('ai_novel_studio_auth_logged_in', 'true');
+          onLoginSuccess();
+          return;
+        } else {
+          setErrorMessage(data.error || '账号或密码不正确，请重新输入');
+          triggerShake();
+          return;
+        }
+      }
+      throw new Error('Server API not available');
+    } catch (err) {
+      // 静态托管环境 (如 GitHub Pages 无 Node 后端) 降级使用本地凭证验证
+      if (accountInput.trim() === getStoredAccount() && passwordInput === getStoredPassword()) {
         localStorage.setItem('ai_novel_studio_auth_logged_in', 'true');
         onLoginSuccess();
       } else {
-        setErrorMessage(data.error || '账号或密码不正确，请重新输入');
+        setErrorMessage('账号或密码不正确，请重新输入');
         triggerShake();
       }
-    } catch (err) {
-      console.error('Login request failed:', err);
-      setErrorMessage('服务器网络连接异常，请重试');
-      triggerShake();
     } finally {
       setIsLoading(false);
     }
@@ -99,10 +112,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！请使用新凭证登录。' });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！请使用新凭证登录。' });
+          localStorage.setItem('ai_novel_studio_account', resetNewAccount.trim());
+          localStorage.setItem('ai_novel_studio_password', resetNewPass.trim());
+          setTimeout(() => {
+            setShowResetModal(false);
+            setResetOldPass('');
+            setResetNewAccount('');
+            setResetNewPass('');
+            setResetConfirmPass('');
+            setResetMsg(null);
+          }, 1500);
+          return;
+        } else {
+          setResetMsg({ type: 'error', text: data.error || '原密码验证失败！' });
+          return;
+        }
+      }
+      throw new Error('Server API not available');
+    } catch (err) {
+      // 静态托管环境（如 GitHub Pages）回退到本地 localStorage 修改
+      if (resetOldPass !== getStoredPassword()) {
+        setResetMsg({ type: 'error', text: '原密码验证不正确！' });
+      } else {
+        localStorage.setItem('ai_novel_studio_account', resetNewAccount.trim());
+        localStorage.setItem('ai_novel_studio_password', resetNewPass.trim());
+        setResetMsg({ type: 'success', text: '账号密码修改成功！请使用新凭证登录。' });
         setTimeout(() => {
           setShowResetModal(false);
           setResetOldPass('');
@@ -111,12 +149,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           setResetConfirmPass('');
           setResetMsg(null);
         }, 1500);
-      } else {
-        setResetMsg({ type: 'error', text: data.error || '原密码验证失败或修改未成功！' });
       }
-    } catch (err) {
-      console.error('Change password error:', err);
-      setResetMsg({ type: 'error', text: '网络请求失败，请稍后重试！' });
     } finally {
       setIsResetting(false);
     }
