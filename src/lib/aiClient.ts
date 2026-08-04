@@ -132,8 +132,11 @@ export async function apiTestModel(params: {
   try {
     const activeBaseUrl = (customBaseUrl || '').trim();
 
-    // OpenAI 格式 (自定义 Base URL 或非 Gemini 模型)
-    if (activeBaseUrl || useChatCompletions || !model.toLowerCase().includes('gemini')) {
+    // 只有在明确设置了自定义 Base URL 且启用了 OpenAI 协议，或者使用了非 Gemini 模型且有 Base URL 时才走 OpenAI 格式
+    const isGeminiKey = apiKey.trim().startsWith('AIza') || apiKey.trim().startsWith('AQ');
+    const shouldUseOpenAI = (activeBaseUrl && useChatCompletions && !isGeminiKey) || (activeBaseUrl && !model.toLowerCase().includes('gemini') && !isGeminiKey);
+
+    if (shouldUseOpenAI) {
       let url = activeBaseUrl || 'https://api.openai.com/v1';
       url = url.replace(/\/+$/, '');
       if (useChatCompletions !== false && !url.endsWith('/chat/completions')) {

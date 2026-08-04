@@ -121,7 +121,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
       setApiKey(savedKey);
       setCustomModelListUrl(savedListUrl);
       setCustomModelBaseUrl(savedBaseUrl);
-      setUseChatCompletions(savedUseChat === null ? true : savedUseChat === 'true');
+      setUseChatCompletions(savedUseChat === 'true');
       setIsSaved(Boolean(savedKey));
       setCustomModelInput('');
 
