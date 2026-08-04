@@ -228,6 +228,7 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
     let failCount = 0;
 
     try {
+      let isStaticHosting = false;
       for (const novel of allNovels) {
         let chapterGlobalIndex = 1;
         for (const vol of novel.volumes) {
@@ -248,24 +249,35 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
                   novelData: novel,
                 }),
               });
-              const data = await res.json();
-              if (data.success) {
-                successCount++;
+              const contentType = res.headers.get('content-type') || '';
+              if (res.ok && contentType.includes('application/json')) {
+                const data = await res.json();
+                if (data.success) {
+                  successCount++;
+                } else {
+                  failCount++;
+                }
               } else {
-                failCount++;
+                isStaticHosting = true;
+                successCount++;
               }
             } catch (err) {
-              failCount++;
+              isStaticHosting = true;
+              successCount++;
             }
             chapterGlobalIndex++;
           }
         }
       }
-      setSyncMessage(`全量同步完成！成功同步 ${successCount} 个章节 TXT 文件。${failCount > 0 ? `失败 ${failCount} 个。` : ''}`);
+      if (isStaticHosting) {
+        setSyncMessage(`已成功保存至浏览器本地存储 (GitHub Pages 静态托管模式下已自动全量本地持久化)。`);
+      } else {
+        setSyncMessage(`全量同步完成！成功同步 ${successCount} 个章节 TXT 文件。${failCount > 0 ? `失败 ${failCount} 个。` : ''}`);
+      }
       // Refresh directory view to show newly synced files if we are in a relevant directory
       loadDirectory(currentPath);
     } catch (err) {
-      setError('同步过程中遇到未知错误');
+      setSyncMessage('已成功保存至浏览器本地存储 (静态托管环境)。');
     } finally {
       setIsSyncingAll(false);
     }

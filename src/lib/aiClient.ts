@@ -163,7 +163,11 @@ export async function apiTestModel(params: {
       }
       let errJson: any = null;
       try { errJson = JSON.parse(text); } catch {}
-      return { success: false, error: errJson?.error?.message || errJson?.message || text || `API 错误 (${response.status})` };
+      let errMsg = errJson?.error?.message || errJson?.message || text || `API 错误 (${response.status})`;
+      if (response.status === 429 || errMsg.toLowerCase().includes('resource_exhausted') || errMsg.toLowerCase().includes('quota')) {
+        errMsg = '当前 AI 模型配额已用尽 (Quota Exceeded / 429 Resource Exhausted)。请点击右上角「模型/API Key」更换其他模型（如 gemma-4-31b-it 或 gemini-2.5-flash），或配置您自己的可用 API Key。';
+      }
+      return { success: false, error: errMsg };
     }
 
     // Google Gemini Direct REST API
@@ -184,7 +188,11 @@ export async function apiTestModel(params: {
     }
     let errJson: any = null;
     try { errJson = JSON.parse(text); } catch {}
-    return { success: false, error: errJson?.error?.message || text || `Gemini API 响应异常 (${response.status})` };
+    let errMsg = errJson?.error?.message || text || `Gemini API 响应异常 (${response.status})`;
+    if (response.status === 429 || errMsg.toLowerCase().includes('resource_exhausted') || errMsg.toLowerCase().includes('quota')) {
+      errMsg = '当前 AI 模型配额已用尽 (Quota Exceeded / 429 Resource Exhausted)。请点击右上角「模型/API Key」更换其他模型（如 gemma-4-31b-it 或 gemini-2.5-flash），或配置您自己的可用 API Key。';
+    }
+    return { success: false, error: errMsg };
   } catch (err: any) {
     return { success: false, error: err.message || '网络连接超时或请求失败' };
   }

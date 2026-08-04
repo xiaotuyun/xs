@@ -545,7 +545,10 @@ async function generateContent(
             continue;
           } else {
             const errJson = await response.json().catch(() => ({}));
-            const errMsg = errJson.error?.message || `Google API 返回错误 (${response.status})`;
+            let errMsg = errJson.error?.message || `Google API 返回错误 (${response.status})`;
+            if (response.status === 429 || errMsg.toLowerCase().includes('resource_exhausted') || errMsg.toLowerCase().includes('quota')) {
+              errMsg = '当前 AI 模型配额已用尽 (Quota Exceeded / 429 Resource Exhausted)。请点击右上角「模型/API Key」更换其他模型（如 gemma-4-31b-it 或 gemini-2.5-flash），或配置您自己的可用 API Key。';
+            }
             const isKeyErr = response.status === 400 && (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('key'));
             
             if (isKeyErr && keyIdx < keysToTry.length - 1) {
