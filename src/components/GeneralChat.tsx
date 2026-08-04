@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, User, X, MessageSquare, Send, Loader2, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { getAiConfig } from '../lib/aiConfig';
+import { callAiApi } from '../lib/aiClient';
 
 interface GeneralChatProps {
   isOpen: boolean;
@@ -76,20 +77,14 @@ export const GeneralChat: React.FC<GeneralChatProps> = ({ isOpen, onClose }) => 
     try {
       const systemInstruction = `你是一位通用创作助理，可以协助作者处理各种任务、构思灵感、回答问题。你的回答需要专业、有创意。`;
 
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          model,
-          messages: newMessages.map(m => ({ role: m.role, text: m.text })),
-          systemInstruction,
-          customBaseUrl,
-          useChatCompletions
-        })
+      const data = await callAiApi('/api/ai/chat', {
+        apiKey,
+        model,
+        messages: newMessages.map(m => ({ role: m.role, text: m.text })),
+        systemInstruction,
+        customBaseUrl,
+        useChatCompletions
       });
-      
-      const data = await response.json();
       
       if (!data.success) {
         throw new Error(data.error || "请求失败");

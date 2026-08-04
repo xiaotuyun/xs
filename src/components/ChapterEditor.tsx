@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Novel, Chapter, Volume } from '../types';
 import { getAiConfig } from '../lib/aiConfig';
+import { callAiApi } from '../lib/aiClient';
 import { PenTool, Sparkles, Save, Loader2, ChevronDown, Check, BookOpen, ArrowLeft, ArrowRight, RefreshCw, X, Settings, Scissors } from 'lucide-react';
 import { getPureWordCount } from '../lib/wordCount';
 import { sortChapters, getEffectiveChapterNumber } from '../lib/chapterUtils';
@@ -289,30 +290,25 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const res = await fetch('/api/ai/generate-chapter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          novelContext: {
-            title: novel.title,
-            genre: novel.genre,
-            worldBuilding: novel.worldBuilding,
-          },
-          chapterTitle: title,
-          chapterSummary: summary,
-          tone: novel.tone,
-          apiKey,
-          model,
-          chapterMinWords: tempMinWords,
-          chapterMaxWords: tempMaxWords,
-          previousChapterContext: getPrecedingContext(),
-          currentVolumeTitle,
-          customBaseUrl,
-          useChatCompletions,
-        }),
+      const data = await callAiApi('/api/ai/generate-chapter', {
+        novelContext: {
+          title: novel.title,
+          genre: novel.genre,
+          worldBuilding: novel.worldBuilding,
+        },
+        chapterTitle: title,
+        chapterSummary: summary,
+        tone: novel.tone,
+        apiKey,
+        model,
+        chapterMinWords: tempMinWords,
+        chapterMaxWords: tempMaxWords,
+        previousChapterContext: getPrecedingContext(),
+        currentVolumeTitle,
+        customBaseUrl,
+        useChatCompletions,
       });
 
-      const data = await res.json();
       if (!data.success) throw new Error(data.error || '生成失败');
 
       setContent(data.content);
@@ -334,25 +330,20 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const res = await fetch('/api/ai/continue-chapter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentText: content,
-          chapterSummary: summary,
-          novelContext: { title: novel.title },
-          apiKey,
-          model,
-          chapterMinWords: tempMinWords,
-          chapterMaxWords: tempMaxWords,
-          previousChapterContext: getPrecedingContext(),
-          currentVolumeTitle,
-          customBaseUrl,
-          useChatCompletions,
-        }),
+      const data = await callAiApi('/api/ai/continue-chapter', {
+        currentText: content,
+        chapterSummary: summary,
+        novelContext: { title: novel.title },
+        apiKey,
+        model,
+        chapterMinWords: tempMinWords,
+        chapterMaxWords: tempMaxWords,
+        previousChapterContext: getPrecedingContext(),
+        currentVolumeTitle,
+        customBaseUrl,
+        useChatCompletions,
       });
 
-      const data = await res.json();
       if (!data.success) throw new Error(data.error || '续写失败');
 
       setContent((prev) => (prev ? prev + '\n\n' + data.content : data.content));
@@ -374,27 +365,22 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const res = await fetch('/api/ai/polish-chapter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentText: content,
-          instruction: polishInstruction,
-          chapterMinWords: tempMinWords,
-          chapterMaxWords: tempMaxWords,
-          novelContext: {
-            title: novel.title,
-            genre: novel.genre,
-            tone: novel.tone,
-          },
-          apiKey,
-          model,
-          customBaseUrl,
-          useChatCompletions,
-        }),
+      const data = await callAiApi('/api/ai/polish-chapter', {
+        currentText: content,
+        instruction: polishInstruction,
+        chapterMinWords: tempMinWords,
+        chapterMaxWords: tempMaxWords,
+        novelContext: {
+          title: novel.title,
+          genre: novel.genre,
+          tone: novel.tone,
+        },
+        apiKey,
+        model,
+        customBaseUrl,
+        useChatCompletions,
       });
 
-      const data = await res.json();
       if (!data.success) throw new Error(data.error || '润色失败');
 
       setContent(data.content);

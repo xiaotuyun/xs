@@ -62,30 +62,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }),
       });
 
-      if (response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json')) {
         const data = await response.json();
         if (data.success) {
           localStorage.setItem('ai_novel_studio_auth_logged_in', 'true');
           onLoginSuccess();
           return;
-        } else {
-          setErrorMessage(data.error || '账号或密码不正确，请重新输入');
-          triggerShake();
-          return;
         }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setErrorMessage(errorData.error || '账号或密码不正确，请重新输入');
-        triggerShake();
-        return;
       }
-    } catch (err) {
-      console.error('Login request failed:', err);
-      setErrorMessage('连接数据库 API 失败，请检查 Cloudflare D1 数据库绑定或网络');
-      triggerShake();
-    } finally {
+    } catch {}
+
+    // Fallback for static hosting (GitHub Pages) or API unavailable
+    const savedAcc = localStorage.getItem('ai_novel_studio_local_account') || 'admin';
+    const savedPass = localStorage.getItem('ai_novel_studio_local_password') || 'admin';
+    if (accountInput.trim() === savedAcc && passwordInput === savedPass) {
+      localStorage.setItem('ai_novel_studio_auth_logged_in', 'true');
+      onLoginSuccess();
       setIsLoading(false);
+      return;
     }
+
+    setErrorMessage('账号或密码不正确，请重新输入');
+    triggerShake();
+    setIsLoading(false);
   };
 
   const triggerShake = () => {
@@ -126,10 +126,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }),
       });
 
-      if (response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json')) {
         const data = await response.json();
         if (data.success) {
-          setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！全球同步已生效。' });
+          setResetMsg({ type: 'success', text: data.message || '账号密码重置成功！' });
           setTimeout(() => {
             setShowResetModal(false);
             setResetOldPass('');
@@ -138,22 +139,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             setResetConfirmPass('');
             setResetMsg(null);
           }, 1500);
-          return;
-        } else {
-          setResetMsg({ type: 'error', text: data.error || '原密码验证失败！' });
+          setIsResetting(false);
           return;
         }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setResetMsg({ type: 'error', text: errorData.error || '修改密码失败，请核对原密码！' });
-        return;
       }
-    } catch (err) {
-      console.error('Change password request failed:', err);
-      setResetMsg({ type: 'error', text: '请求数据库 API 失败，请检查 Cloudflare D1 数据库连接配置！' });
-    } finally {
+    } catch {}
+
+    // Fallback for static hosting (GitHub Pages)
+    const savedPass = localStorage.getItem('ai_novel_studio_local_password') || 'admin';
+    if (resetOldPass === savedPass) {
+      localStorage.setItem('ai_novel_studio_local_account', resetNewAccount.trim());
+      localStorage.setItem('ai_novel_studio_local_password', resetNewPass.trim());
+      setResetMsg({ type: 'success', text: '账号密码修改成功（已安全同步至浏览器本地存储）！' });
+      setTimeout(() => {
+        setShowResetModal(false);
+        setResetOldPass('');
+        setResetNewAccount('');
+        setResetNewPass('');
+        setResetConfirmPass('');
+        setResetMsg(null);
+      }, 1500);
       setIsResetting(false);
+      return;
     }
+
+    setResetMsg({ type: 'error', text: '原密码验证失败！' });
+    setIsResetting(false);
   };
 
   const handleSaveApiUrl = (e: React.FormEvent) => {

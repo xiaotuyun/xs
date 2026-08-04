@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Novel, Volume, Chapter, TabType, WorldBuilding, Character } from '../types';
 import { getAiConfig } from '../lib/aiConfig';
+import { callAiApi } from '../lib/aiClient';
 import { Sparkles, BookOpen, Globe, Users, FileText, PenTool, ArrowRight, Loader2, Award, Clock, Settings, X, Trash2 } from 'lucide-react';
 import { getPureWordCount } from '../lib/wordCount';
 
@@ -72,13 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const res = await fetch('/api/ai/generate-outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, genre, targetLength, tone, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions }),
-      });
-
-      const data = await res.json();
+      const data = await callAiApi('/api/ai/generate-outline', { prompt, genre, targetLength, tone, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions });
       if (!data.success) {
         throw new Error(data.error || '生成失败');
       }

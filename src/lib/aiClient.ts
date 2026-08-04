@@ -189,3 +189,99 @@ export async function apiTestModel(params: {
     return { success: false, error: err.message || '网络连接超时或请求失败' };
   }
 }
+
+export async function callAiApi(path: string, payload: any): Promise<any> {
+  // 1. Try server endpoint first
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (data) return data;
+    }
+  } catch {}
+
+  // 2. Fallback for static hosting (GitHub Pages) or when Node.js API is unavailable
+  const apiKey = localStorage.getItem('ai_novel_studio_apikey') || payload.apiKey || '';
+  const model = localStorage.getItem('ai_novel_studio_model') || payload.model || 'gemini-2.5-flash';
+  const customBaseUrl = localStorage.getItem('ai_novel_studio_custom_base_url') || payload.customBaseUrl || '';
+  const useChatCompletions = localStorage.getItem('ai_novel_studio_use_chat_completions') === 'true' || payload.useChatCompletions;
+
+  if (!apiKey) {
+    return { success: false, error: '当前运行在纯静态托管环境 (GitHub Pages)，请点击右上角“模型/API Key”配置您的 API Key。' };
+  }
+
+  let prompt = '';
+  if (path.includes('/chat')) {
+    const messages = payload.messages || [];
+    const system = payload.systemInstruction ? `系统指令：${payload.systemInstruction}\n\n` : '';
+    prompt = system + messages.map((m: any) => `${m.role === 'user' ? '用户' : 'AI'}: ${m.text || m.content}`).join('\n') + '\nAI:';
+  } else if (path.includes('/generate-outline')) {
+    prompt = `请为以下小说构思分卷与章节大纲：
+小说书名：${payload.title || '无名小说'}
+题材流派：${payload.genre || '通用'}
+核心构思/一句话简介：${payload.logline || ''}
+世界观：${JSON.stringify(payload.worldBuilding || {})}
+主要角色：${JSON.stringify(payload.characters || [])}
+
+请严格输出包含卷名、卷简介、章节列表（含章标题与章摘要）的完整大纲结构。`;
+  } else if (path.includes('/extend-outline')) {
+    prompt = `请为小说《${payload.title}》（题材：${payload.genre}）续接后续大纲。
+续接要求：${payload.prompt}
+已有大纲参考：${JSON.stringify(payload.existingVolumes || [])}
+请按照现有风格继续创作后续的卷与章节。`;
+  } else if (path.includes('/generate-chapter')) {
+    prompt = `请根据以下小说设定和上下文创作章节正文：
+小说书名：${payload.novelContext?.title}
+题材：${payload.novelContext?.genre}
+当前卷：${payload.currentVolumeTitle}
+章节标题：${payload.chapterTitle}
+章节摘要大纲：${payload.chapterSummary}
+前文剧情回顾：${payload.previousChapterContext || '无'}
+字数要求：大约 ${payload.chapterMinWords || 2000} - ${payload.chapterMaxWords || 4000} 字。
+请直接输出流畅细腻的章节正文内容，情节生动，文笔优美。`;
+  } else if (path.includes('/continue-chapter')) {
+    prompt = `请根据以下前文内容续写小说章节《${payload.chapterTitle}》：
+前文内容：${(payload.currentContent || '').slice(-1500)}
+续写方向/要求：${payload.prompt || '顺着剧情自然续写，保持文风一致'}
+字数要求：大约 ${payload.chapterMinWords || 1000} 字。
+请直接输出续写的正文内容。`;
+  } else if (path.includes('/polish-chapter')) {
+    prompt = `请润色/扩写以下小说章节《${payload.chapterTitle}》：
+原文内容：${payload.currentContent}
+润色指令/要求：${payload.prompt || '优化文笔，增加细节描写'}
+请直接输出润色修改后的完整正文内容。`;
+  } else if (payload.prompt) {
+    prompt = payload.prompt;
+  } else {
+    prompt = `请根据以下需求协助创作小说：\n${JSON.stringify(payload, null, 2)}`;
+  }
+
+  const testRes = await apiTestModel({
+    apiKey,
+    model,
+    prompt,
+    customBaseUrl: customBaseUrl || undefined,
+    useChatCompletions,
+  });
+
+  if (testRes.success) {
+    const text = testRes.response || '';
+    return {
+      success: true,
+      text,
+      reply: text,
+      content: text,
+      outline: text,
+      chapters: text,
+      volumes: text,
+    };
+  } else {
+    return { success: false, error: testRes.error || 'AI 请求失败' };
+  }
+}
+

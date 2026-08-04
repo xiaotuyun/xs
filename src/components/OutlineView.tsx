@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Novel, Volume, Chapter, TabType, WorldBuilding, Character } from '../types';
 import { getAiConfig } from '../lib/aiConfig';
+import { callAiApi } from '../lib/aiClient';
 import { FileText, Plus, Trash2, Edit2, ChevronRight, PenTool, Sparkles, FolderPlus, Loader2, AlertTriangle, X, RefreshCw, Wand2, FolderMinus, Unlink, Layers } from 'lucide-react';
 import { getPureWordCount } from '../lib/wordCount';
 import { parseChapterNumberFromTitle, getEffectiveChapterNumber, sortChapters, normalizeNovelChaptersAndTitles } from '../lib/chapterUtils';
@@ -240,30 +241,25 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
         })),
       }));
 
-      const res = await fetch('/api/ai/extend-outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: novel.title,
-          genre: novel.genre,
-          logline: novel.logline,
-          worldBuilding: novel.worldBuilding,
-          characters: novel.characters,
-          existingVolumes,
-          prompt: extendPrompt,
-          targetLength: extendTargetLength,
-          tone: extendTone,
-          titleStyle: extendTitleStyle,
-          volumeCount: extendVolumeCount,
-          chapterCount: extendChapterCount,
-          apiKey,
-          model,
-          customBaseUrl,
-          useChatCompletions,
-        }),
+      const data = await callAiApi('/api/ai/extend-outline', {
+        title: novel.title,
+        genre: novel.genre,
+        logline: novel.logline,
+        worldBuilding: novel.worldBuilding,
+        characters: novel.characters,
+        existingVolumes,
+        prompt: extendPrompt,
+        targetLength: extendTargetLength,
+        tone: extendTone,
+        titleStyle: extendTitleStyle,
+        volumeCount: extendVolumeCount,
+        chapterCount: extendChapterCount,
+        apiKey,
+        model,
+        customBaseUrl,
+        useChatCompletions,
       });
 
-      const data = await res.json();
       if (!data.success) {
         throw new Error(data.error || '续接大纲失败');
       }
@@ -323,13 +319,7 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const res = await fetch('/api/ai/generate-outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, genre, targetLength, tone, titleStyle, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions }),
-      });
-
-      const data = await res.json();
+      const data = await callAiApi('/api/ai/generate-outline', { prompt, genre, targetLength, tone, titleStyle, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions });
       if (!data.success) {
         throw new Error(data.error || '生成失败');
       }
@@ -575,38 +565,33 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
         .map((v) => `第${v.volumeNumber}卷【${v.volumeTitle}】概要: ${v.summary || '无'}`)
         .join('\n');
 
-      const res = await fetch('/api/ai/recast-volume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: novel.title,
-          genre: novel.genre,
-          logline: novel.logline,
-          worldBuilding: novel.worldBuilding,
-          characters: novel.characters,
-          targetVolume: {
-            volumeNumber: recastingVolume.volumeNumber,
-            volumeTitle: recastingVolume.volumeTitle,
-            summary: recastingVolume.summary,
-            chapters: recastingVolume.chapters.map((c) => ({
-              chapterNumber: c.chapterNumber,
-              title: c.title,
-              summary: c.summary,
-            })),
-          },
-          precedingVolumesContext,
-          succeedingVolumesContext,
-          recastPrompt,
-          chapterCount: recastChapterCount,
-          tone: novel.tone,
-          apiKey,
-          model,
-          customBaseUrl,
-          useChatCompletions,
-        }),
+      const data = await callAiApi('/api/ai/recast-volume', {
+        title: novel.title,
+        genre: novel.genre,
+        logline: novel.logline,
+        worldBuilding: novel.worldBuilding,
+        characters: novel.characters,
+        targetVolume: {
+          volumeNumber: recastingVolume.volumeNumber,
+          volumeTitle: recastingVolume.volumeTitle,
+          summary: recastingVolume.summary,
+          chapters: recastingVolume.chapters.map((c) => ({
+            chapterNumber: c.chapterNumber,
+            title: c.title,
+            summary: c.summary,
+          })),
+        },
+        precedingVolumesContext,
+        succeedingVolumesContext,
+        recastPrompt,
+        chapterCount: recastChapterCount,
+        tone: novel.tone,
+        apiKey,
+        model,
+        customBaseUrl,
+        useChatCompletions,
       });
 
-      const data = await res.json();
       if (!data.success) {
         throw new Error(data.error || '重铸本卷大纲失败');
       }
