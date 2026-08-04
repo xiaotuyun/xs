@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchEnvConfig, apiFetchModels, apiTestModel } from '../lib/aiClient';
 import { 
   Key, 
   Sparkles, 
@@ -157,8 +158,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
         }
       }
 
-      fetch('/api/ai/env-config')
-        .then(res => res.json())
+      fetchEnvConfig()
         .then(data => {
           if (data && data.success) {
             setEnvConfig(data);
@@ -275,19 +275,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     });
 
     try {
-      const res = await fetch('/api/ai/test-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: activeKey,
-          model: modelId,
-          prompt: testPrompt.trim(),
-          customBaseUrl: customModelBaseUrl.trim() || undefined,
-          useChatCompletions
-        }),
+      const data = await apiTestModel({
+        apiKey: activeKey,
+        model: modelId,
+        prompt: testPrompt.trim(),
+        customBaseUrl: customModelBaseUrl.trim() || undefined,
+        useChatCompletions
       });
       
-      const data = await res.json();
       if (data.success) {
         setSingleTestResults(prev => ({
           ...prev,
@@ -391,16 +386,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     setTestError('');
 
     try {
-      const res = await fetch('/api/ai/fetch-models', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          apiKey: activeKey,
-          customListUrl: customModelListUrl.trim() || undefined,
-          customBaseUrl: customModelBaseUrl.trim() || undefined
-        }),
+      const data = await apiFetchModels({
+        apiKey: activeKey,
+        customListUrl: customModelListUrl.trim() || undefined,
+        customBaseUrl: customModelBaseUrl.trim() || undefined
       });
-      const data = await res.json();
 
       if (data.success && Array.isArray(data.models) && data.models.length > 0) {
         localStorage.setItem('ai_novel_studio_apikey', activeKey);
@@ -472,19 +462,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     setTestError('');
 
     try {
-      const res = await fetch('/api/ai/test-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: activeKey,
-          model: currentModel,
-          prompt: testPrompt.trim(),
-          customBaseUrl: customModelBaseUrl.trim() || undefined,
-          useChatCompletions
-        }),
+      const data = await apiTestModel({
+        apiKey: activeKey,
+        model: currentModel,
+        prompt: testPrompt.trim(),
+        customBaseUrl: customModelBaseUrl.trim() || undefined,
+        useChatCompletions
       });
       
-      const data = await res.json();
       if (data.success) {
         setModelResponse(data.response || '模型响应成功，但返回了空内容。');
       } else {
