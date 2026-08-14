@@ -665,7 +665,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="在此输入或使用 AI 生成本章正文内容..."
-              className="w-full font-serif text-base sm:text-lg text-stone-900 novel-typeset p-4 sm:p-6 bg-stone-50/50 rounded-2xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y"
+              className="w-full font-serif text-base sm:text-lg text-stone-900 leading-relaxed p-4 sm:p-6 bg-stone-50/50 rounded-2xl border border-stone-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y"
             />
           </div>
         </div>
