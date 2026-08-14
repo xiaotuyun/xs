@@ -1,0 +1,3 @@
+
+  // 体验计时�  const [usedSeconds, setUsedSeconds] = useState<number>(0);
+  const [maxSeconds, setMaxSeconds] = useState<number>(() => parseInt(localStorage.getItem('ai_novel_studio_timeout_max') || '3600', 10));
