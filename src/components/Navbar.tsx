@@ -85,9 +85,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-2xs">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         {/* ROW 1: Brand & Top Utilities */}
-        <div className="flex justify-between h-14 items-center border-b border-stone-100 gap-2 overflow-x-auto scrollbar-none">
+        <div className="flex items-center justify-between md:justify-between h-14 border-b border-stone-100 gap-4 overflow-x-auto scrollbar-none whitespace-nowrap shrink-0">
           {/* Logo Brand */}
           <div className="flex items-center space-x-2.5 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-2xs shrink-0">
@@ -140,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right utilities */}
-          <div className="flex items-center space-x-2 overflow-x-auto scrollbar-none py-1 shrink-0 ml-auto pl-2">
+          <div className="flex items-center space-x-2 py-1 shrink-0">
             <button
               onClick={onToggleGeneralChat}
               className="inline-flex items-center px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-all shadow-3xs cursor-pointer shrink-0"
@@ -243,7 +243,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* ROW 2: Active Novel Selection, Custom Actions, and Central Tabs & Stats */}
-        <div className="flex items-center justify-between h-12 gap-2.5 overflow-x-auto scrollbar-none">
+        <div className="flex items-center justify-between md:justify-between h-12 gap-2.5 overflow-x-auto scrollbar-none whitespace-nowrap shrink-0">
           {/* Left: Book selector + New button */}
           <div className="flex items-center space-x-2 shrink-0">
             <select
