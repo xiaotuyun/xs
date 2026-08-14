@@ -11,9 +11,18 @@
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
+
+  /* 专业小说客户端排版格式：首行缩进与行高 */
+  .novel-typeset {
+    text-indent: 2em;
+    line-height: 1.85;
+    letter-spacing: 0.05em;
+  }
 }
 
 html, body {
   min-width: 1100px;
   overflow-x: auto;
+  -webkit-text-size-adjust: 100%;
 }
+

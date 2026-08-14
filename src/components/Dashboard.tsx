@@ -255,7 +255,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">总字数统计</p>
@@ -298,9 +298,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
       </div>
 
       {/* Main Content Sections: AI Assistant Generator & Quick Navigation */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-3 gap-8">
         {/* AI Generator Box (2 cols) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="col-span-2 bg-white rounded-2xl border border-stone-200 p-6 sm:p-8 shadow-xs space-y-6">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
               <Sparkles className="w-5 h-5" />
@@ -332,7 +332,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
                   小说流派 (可自定义)
@@ -419,7 +419,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
             </div>
 
             {/* Custom structure: volumes and chapters counts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-stone-100">
+            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-stone-100">
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider">
                   生成分卷数量
@@ -492,7 +492,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
               <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-2">
                 生成目标模式
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setTargetOption('new')}
