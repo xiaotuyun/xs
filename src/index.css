@@ -21,6 +21,7 @@
 }
 
 html, body {
+  width: 1100px;
   min-width: 1100px;
   overflow-x: auto;
   -webkit-text-size-adjust: 100%;
