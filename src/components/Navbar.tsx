@@ -85,10 +85,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-2xs">
-      {/* 1. DESKTOP CLIENT (md:block, hidden on mobile) - 100% UNTOUCHED ORIGINAL LAYOUT */}
-      <div className="hidden md:block max-w-7xl mx-auto px-4 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 lg:px-8">
         {/* ROW 1: Brand & Top Utilities */}
-        <div className="flex justify-between h-14 items-center border-b border-stone-100 gap-2">
+        <div className="flex justify-between h-14 items-center border-b border-stone-100 gap-2 overflow-x-auto scrollbar-none">
           {/* Logo Brand */}
           <div className="flex items-center space-x-2.5 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-2xs shrink-0">
@@ -244,7 +243,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* ROW 2: Active Novel Selection, Custom Actions, and Central Tabs & Stats */}
-        <div className="flex items-center justify-between h-12 gap-2.5">
+        <div className="flex items-center justify-between h-12 gap-2.5 overflow-x-auto scrollbar-none">
           {/* Left: Book selector + New button */}
           <div className="flex items-center space-x-2 shrink-0">
             <select
@@ -271,7 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Core Workspace Tabs */}
-          <nav className="flex space-x-1.5 py-0.5">
+          <nav className="flex space-x-1.5 py-0.5 shrink-0">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer select-none whitespace-nowrap shrink-0 ${
@@ -334,136 +333,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>总字数: <strong className="text-stone-800 font-bold">{totalWords.toLocaleString()}</strong></span>
             <span className="text-stone-300 font-light">|</span>
             <span>章节: <strong className="text-stone-800 font-bold">{totalChapters}</strong></span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. MOBILE VERSION (block md:hidden) - Custom single-row mobile layout */}
-      <div className="block md:hidden px-2 py-1.5">
-        <div className="flex items-center justify-between h-12 gap-2 overflow-x-auto scrollbar-none">
-          {/* Logo Brand */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-2xs shrink-0">
-              <BookOpen className="w-4 h-4" />
-            </div>
-          </div>
-
-          {/* Book selector */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            <select
-              aria-label="当前写作小说"
-              value={currentNovel.id}
-              onChange={(e) => onSelectNovel(e.target.value)}
-              className="bg-stone-50 border border-stone-200 text-stone-800 text-xs rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-bold max-w-[120px] truncate"
-            >
-              {allNovels.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.title}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={onNewNovel}
-              className="inline-flex items-center px-2 py-1.5 border border-stone-200 text-xs font-bold rounded-lg text-amber-700 bg-white hover:bg-amber-50 transition-all shadow-2xs cursor-pointer shrink-0"
-              title="新建一本小说"
-            >
-              <Plus className="w-3.5 h-3.5 text-amber-600" />
-            </button>
-          </div>
-
-          {/* Core Workspace Tabs */}
-          <nav className="flex space-x-1 shrink-0">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer select-none whitespace-nowrap shrink-0 ${
-                activeTab === 'dashboard'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-              }`}
-              title="总览"
-            >
-              <FolderKanban className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setActiveTab('world')}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer select-none whitespace-nowrap shrink-0 ${
-                activeTab === 'world'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-              }`}
-              title="世界观"
-            >
-              <Globe className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setActiveTab('characters')}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer select-none whitespace-nowrap shrink-0 ${
-                activeTab === 'characters'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-              }`}
-              title="人物"
-            >
-              <Users className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setActiveTab('outline')}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer select-none whitespace-nowrap shrink-0 ${
-                activeTab === 'outline'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-              }`}
-              title="大纲"
-            >
-              <FileText className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setActiveTab('editor')}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer select-none whitespace-nowrap shrink-0 ${
-                activeTab === 'editor'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-              }`}
-              title="写作"
-            >
-              <PenTool className="w-3.5 h-3.5" />
-            </button>
-          </nav>
-
-          {/* Mobile Right Utilities */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            <button
-              onClick={onToggleGeneralChat}
-              className="inline-flex items-center p-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-all shadow-3xs cursor-pointer shrink-0"
-              title="助手"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            </button>
-
-            <button
-              onClick={onOpenAllNovels}
-              className={`inline-flex items-center p-1.5 rounded-lg border transition-all text-xs font-bold shadow-2xs cursor-pointer shrink-0 ${
-                activeTab === 'bookshelf'
-                  ? 'border-amber-600 bg-amber-600 text-white'
-                  : 'border-stone-200 bg-amber-50/40 text-stone-700'
-              }`}
-              title="书架"
-            >
-              <FolderKanban className={`w-3.5 h-3.5 ${activeTab === 'bookshelf' ? 'text-white' : 'text-amber-600'}`} />
-            </button>
-
-            <button
-              onClick={onOpenApiKey}
-              className={`inline-flex items-center p-1.5 border text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer shrink-0 ${
-                activeTab === 'apikeys'
-                  ? 'border-purple-600 bg-purple-600 text-white'
-                  : 'border-stone-200 bg-white text-stone-700'
-              }`}
-              title="模型配置"
-            >
-              <Key className="w-3.5 h-3.5 text-stone-500" />
-            </button>
           </div>
         </div>
       </div>
