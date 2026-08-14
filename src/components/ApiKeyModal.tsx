@@ -1215,7 +1215,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen = true, onClose
                   saveAndSyncConfigs(newConfigs, activeProvider);
                 }}
                 selectedModel={selectedModel}
+                selectedModels={selectedModels}
                 onSelectModel={handleSetPrimaryModel}
+                onToggleSelectModel={handleToggleSelectModel}
+                onSelectAllModels={handleSelectAllModels}
+                onClearSelectedModels={handleClearAllSelectedModels}
                 hasEnvKey={envConfig?.providers?.huggingface?.hasEnvApiKey}
                 envMaskedKey={envConfig?.providers?.huggingface?.apiKeyMasked}
                 feedbackMessage={fetchResult}
