@@ -500,7 +500,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
               ) : isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 sm:w-4 h-4 animate-spin" />
-                  <span className="hidden min-[400px]:inline">保存中</span>
+                  <span>保存中</span>
                 </>
               ) : (
                 <>

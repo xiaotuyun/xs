@@ -93,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-2xs shrink-0">
               <BookOpen className="w-4.5 h-4.5" />
             </div>
-            <div className="hidden min-[450px]:block">
+            <div className="">
               <h1 className="font-bold text-stone-900 text-sm sm:text-base leading-none tracking-tight">
                 小说创作工坊
               </h1>
@@ -103,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {isAdminUser && (
               <div className="px-1 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-black border border-blue-200 shadow-3xs flex items-center gap-0.5 shrink-0 ml-1">
                 <Users className="w-2.5 h-2.5" />
-                <span className="hidden sm:inline">管理员</span>
+                <span>管理员</span>
               </div>
             )}
 
@@ -113,14 +113,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="查看使用指南"
             >
               <Lightbulb className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span className="hidden sm:inline">使用说明</span>
+              <span>使用说明</span>
             </button>
 
             {isLimitedUser && (
               <div className="flex items-center space-x-1 sm:space-x-2.5 px-2 sm:px-3 py-1 rounded-full bg-amber-50 border border-amber-200 shadow-3xs ml-1 sm:ml-4 shrink-0">
                 <div className="flex items-center space-x-1">
                   <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                  <span className="hidden min-[400px]:inline text-[9px] sm:text-[10px] text-amber-700 font-bold uppercase tracking-wider">剩余:</span>
+                  <span className="text-[9px] sm:text-[10px] text-amber-700 font-bold uppercase tracking-wider">剩余:</span>
                 </div>
                 <span className="text-[10px] sm:text-xs font-black tabular-nums text-amber-900 min-w-[30px] sm:min-w-[50px]">
                   {(() => {
@@ -147,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="与 AI 通用助手交流"
             >
               <Sparkles className="w-3 sm:w-3.5 h-3 sm:h-3.5 mr-0.5 sm:mr-1 text-amber-600 shrink-0" />
-              <span className="hidden sm:inline">通用助手</span>
+              <span>通用助手</span>
             </button>
 
             <button
@@ -156,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="反馈问题或改进建议"
             >
               <MessageCircle className="w-3 sm:w-3.5 h-3 sm:h-3.5 mr-0.5 sm:mr-1 text-stone-500 shrink-0" />
-              <span className="hidden sm:inline">反馈</span>
+              <span>反馈</span>
             </button>
 
             <button
@@ -243,15 +243,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* ROW 2: Active Novel Selection, Custom Actions, and Central Tabs & Stats */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between py-2 md:h-12 gap-2.5">
+        <div className="flex flex-row items-center justify-between py-2 h-12 gap-3 overflow-x-auto scrollbar-none shrink-0">
           {/* Left: Book selector + New button */}
-          <div className="flex items-center justify-between md:justify-start space-x-2 w-full md:w-auto shrink-0">
+          <div className="flex items-center space-x-2 shrink-0">
             <div className="flex items-center space-x-2">
               <select
                 aria-label="当前写作小说"
                 value={currentNovel.id}
                 onChange={(e) => onSelectNovel(e.target.value)}
-                className="bg-stone-50 border border-stone-200 text-stone-800 text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-bold max-w-[160px] sm:max-w-[220px] truncate"
+                className="bg-stone-50 border border-stone-200 text-stone-800 text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-bold max-w-[140px] sm:max-w-[180px] truncate"
               >
                 {allNovels.map((n) => (
                   <option key={n.id} value={n.id}>
@@ -262,22 +262,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={onNewNovel}
-                className="inline-flex items-center px-2.5 py-1.5 border border-stone-200 text-xs font-bold rounded-lg text-amber-700 bg-white hover:bg-amber-50 transition-all shadow-2xs cursor-pointer shrink-0"
+                className="inline-flex items-center px-2 py-1.5 border border-stone-200 text-xs font-bold rounded-lg text-amber-700 bg-white hover:bg-amber-50 transition-all shadow-2xs cursor-pointer shrink-0"
                 title="新建一本小说"
               >
                 <Plus className="w-3.5 h-3.5 mr-0.5 text-amber-600" />
                 新建
               </button>
             </div>
-
-            {/* Mobile-only stats display */}
-            <div className="flex md:hidden items-center space-x-1.5 text-[11px] font-bold text-stone-500 bg-stone-50 px-2 py-1 border border-stone-200/60 rounded-lg shrink-0">
-              <span>{totalWords.toLocaleString()} 字</span>
-            </div>
           </div>
 
-          {/* Core Workspace Tabs - Scrollable on mobile */}
-          <div className="flex-1 max-w-full overflow-x-auto scrollbar-none -mx-2 px-2 md:mx-0 md:px-0">
+          {/* Core Workspace Tabs - Scrollable */}
+          <div className="flex-1 overflow-x-auto scrollbar-none px-1 min-w-[280px]">
             <nav className="flex space-x-1.5 py-0.5 min-w-max">
               <button
                 onClick={() => setActiveTab('dashboard')}
@@ -337,8 +332,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </nav>
           </div>
 
-          {/* Desktop Stats indicator */}
-          <div className="hidden md:flex items-center space-x-2 text-xs font-medium text-stone-500 bg-stone-50 px-3 py-1.5 border border-stone-200/60 rounded-lg shrink-0">
+          {/* Stats indicator */}
+          <div className="flex items-center space-x-2 text-xs font-medium text-stone-500 bg-stone-50 px-3 py-1.5 border border-stone-200/60 rounded-lg shrink-0">
             <span>总字数: <strong className="text-stone-800 font-bold">{totalWords.toLocaleString()}</strong></span>
             <span className="text-stone-300 font-light">|</span>
             <span>章节: <strong className="text-stone-800 font-bold">{totalChapters}</strong></span>
