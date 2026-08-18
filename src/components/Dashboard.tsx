@@ -4,6 +4,7 @@ import { getAiConfig } from '../lib/aiConfig';
 import { callAiApi } from '../lib/aiClient';
 import { Sparkles, BookOpen, Globe, Users, FileText, PenTool, ArrowRight, Loader2, Award, Clock, Settings, X, Trash2 } from 'lucide-react';
 import { getPureWordCount } from '../lib/wordCount';
+import { enforceExactVolumesAndChapters } from '../lib/chapterUtils';
 
 interface DashboardProps {
   novel: Novel;
@@ -73,38 +74,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ novel, onUpdateNovel, onCr
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const data = await callAiApi('/api/ai/generate-outline', { prompt, genre, targetLength, tone, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions });
+      const data = await callAiApi('/api/ai/generate-outline', {
+        prompt,
+        genre,
+        targetLength,
+        tone,
+        apiKey,
+        model,
+        volumeCount,
+        chapterCount,
+        title: targetOption === 'current' ? novel.title : undefined,
+        logline: targetOption === 'current' ? novel.logline : undefined,
+        worldBuilding: targetOption === 'current' ? novel.worldBuilding : undefined,
+        characters: targetOption === 'current' ? novel.characters : undefined,
+        customBaseUrl,
+        useChatCompletions
+      });
       if (!data.success) {
         throw new Error(data.error || '生成失败');
       }
 
       const generated = data.data || {};
 
-      // Parse volumes flexibly
+      // Parse volumes strictly according to requested volumeCount and chapterCount
       const volumesList = generated.volumes || generated.newVolumes || generated.data?.volumes || [];
-      const formattedVolumes: Volume[] = Array.isArray(volumesList) && volumesList.length > 0
-        ? volumesList.map((vol: any, vIdx: number) => ({
-            id: (targetOption === 'current' && novel.volumes[vIdx]) ? novel.volumes[vIdx].id : `vol-${Date.now()}-${vIdx}`,
-            volumeNumber: vol.volumeNumber || vIdx + 1,
-            volumeTitle: vol.volumeTitle || `第${vIdx + 1}卷`,
-            summary: vol.summary || '',
-            chapters: (vol.chapters || []).map((ch: any, cIdx: number) => {
-              const existingChap = targetOption === 'current'
-                ? (novel.volumes[vIdx]?.chapters[cIdx] || novel.volumes.flatMap(v => v.chapters).find(item => item.chapterNumber === (ch.chapterNumber || cIdx + 1)))
-                : undefined;
-
-              return {
-                id: existingChap?.id || `chap-${Date.now()}-${vIdx}-${cIdx}`,
-                chapterNumber: ch.chapterNumber || cIdx + 1,
-                title: ch.title || `第${cIdx + 1}章`,
-                summary: ch.summary || '',
-                content: existingChap?.content || '',
-                wordCount: existingChap?.wordCount || 0,
-                status: existingChap?.status || 'draft' as const,
-              };
-            }),
-          }))
-        : novel.volumes;
+      const formattedVolumes: Volume[] = enforceExactVolumesAndChapters(
+        volumesList,
+        volumeCount,
+        chapterCount,
+        1,
+        1,
+        targetOption === 'current' ? novel.volumes : undefined
+      );
 
       // Parse worldBuilding safely
       const genWb = typeof generated.worldBuilding === 'object' ? generated.worldBuilding : {};

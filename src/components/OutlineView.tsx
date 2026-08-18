@@ -4,7 +4,7 @@ import { getAiConfig } from '../lib/aiConfig';
 import { callAiApi } from '../lib/aiClient';
 import { FileText, Plus, Trash2, Edit2, ChevronRight, PenTool, Sparkles, FolderPlus, Loader2, AlertTriangle, X, RefreshCw, Wand2, FolderMinus, Unlink, Layers } from 'lucide-react';
 import { getPureWordCount } from '../lib/wordCount';
-import { parseChapterNumberFromTitle, getEffectiveChapterNumber, sortChapters, normalizeNovelChaptersAndTitles } from '../lib/chapterUtils';
+import { parseChapterNumberFromTitle, getEffectiveChapterNumber, sortChapters, normalizeNovelChaptersAndTitles, enforceExactVolumesAndChapters, enforceExactChaptersForVolume } from '../lib/chapterUtils';
 
 interface OutlineViewProps {
   novel: Novel;
@@ -275,24 +275,18 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
         0
       );
 
-      const formattedNewVolumes: Volume[] = newVolsFromAi.map((vol: any, vIdx: number) => {
-        const vNum = vol.volumeNumber || currentLastVolNum + vIdx + 1;
-        return {
-          id: `vol-${Date.now()}-${vIdx}`,
-          volumeNumber: vNum,
-          volumeTitle: vol.volumeTitle || `第${vNum}卷`,
-          summary: vol.summary || '',
-          chapters: (vol.chapters || []).map((ch: any, cIdx: number) => ({
-            id: `chap-${Date.now()}-${vIdx}-${cIdx}`,
-            chapterNumber: ch.chapterNumber || cIdx + 1,
-            title: ch.title || `第${cIdx + 1}章`,
-            summary: ch.summary || '',
-            content: '',
-            wordCount: 0,
-            status: 'draft' as const,
-          })),
-        };
-      });
+      const totalExistingChapters = novel.volumes.reduce(
+        (acc, vol) => acc + vol.chapters.length,
+        0
+      );
+
+      const formattedNewVolumes = enforceExactVolumesAndChapters(
+        newVolsFromAi,
+        extendVolumeCount,
+        extendChapterCount,
+        currentLastVolNum + 1,
+        totalExistingChapters + 1
+      );
 
       const updatedNovel: Novel = {
         ...novel,
@@ -320,38 +314,39 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
-      const data = await callAiApi('/api/ai/generate-outline', { prompt, genre, targetLength, tone, titleStyle, apiKey, model, volumeCount, chapterCount, customBaseUrl, useChatCompletions });
+      const data = await callAiApi('/api/ai/generate-outline', {
+        prompt,
+        genre,
+        targetLength,
+        tone,
+        titleStyle,
+        apiKey,
+        model,
+        volumeCount,
+        chapterCount,
+        title: targetOption === 'current' ? novel.title : undefined,
+        logline: targetOption === 'current' ? novel.logline : undefined,
+        worldBuilding: targetOption === 'current' ? novel.worldBuilding : undefined,
+        characters: targetOption === 'current' ? novel.characters : undefined,
+        customBaseUrl,
+        useChatCompletions
+      });
       if (!data.success) {
         throw new Error(data.error || '生成失败');
       }
 
       const generated = data.data || {};
 
-      // Parse volumes flexibly
+      // Parse volumes strictly according to requested volumeCount and chapterCount
       const volumesList = generated.volumes || generated.newVolumes || generated.data?.volumes || [];
-      const formattedVolumes: Volume[] = Array.isArray(volumesList) && volumesList.length > 0
-        ? volumesList.map((vol: any, vIdx: number) => ({
-            id: (targetOption === 'current' && novel.volumes[vIdx]) ? novel.volumes[vIdx].id : `vol-${Date.now()}-${vIdx}`,
-            volumeNumber: vol.volumeNumber || vIdx + 1,
-            volumeTitle: vol.volumeTitle || `第${vIdx + 1}卷`,
-            summary: vol.summary || '',
-            chapters: (vol.chapters || []).map((ch: any, cIdx: number) => {
-              const existingChap = targetOption === 'current'
-                ? (novel.volumes[vIdx]?.chapters[cIdx] || novel.volumes.flatMap(v => v.chapters).find(item => item.chapterNumber === (ch.chapterNumber || cIdx + 1)))
-                : undefined;
-
-              return {
-                id: existingChap?.id || `chap-${Date.now()}-${vIdx}-${cIdx}`,
-                chapterNumber: ch.chapterNumber || cIdx + 1,
-                title: ch.title || `第${cIdx + 1}章`,
-                summary: ch.summary || '',
-                content: existingChap?.content || '',
-                wordCount: existingChap?.wordCount || 0,
-                status: existingChap?.status || 'draft' as const,
-              };
-            }),
-          }))
-        : novel.volumes;
+      const formattedVolumes: Volume[] = enforceExactVolumesAndChapters(
+        volumesList,
+        volumeCount,
+        chapterCount,
+        1,
+        1,
+        targetOption === 'current' ? novel.volumes : undefined
+      );
 
       // Parse worldBuilding safely
       const genWb = typeof generated.worldBuilding === 'object' ? generated.worldBuilding : {};
@@ -602,18 +597,14 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
       const newVolSummary = recastData.summary || recastingVolume.summary;
       const newChaptersFromAi = recastData.chapters || [];
 
-      const updatedChapters: Chapter[] = newChaptersFromAi.map((ch: any, cIdx: number) => {
-        const existingChap = recastingVolume.chapters[cIdx];
-        return {
-          id: existingChap?.id || `chap-${Date.now()}-${recastingVolume.id}-${cIdx}`,
-          chapterNumber: ch.chapterNumber || cIdx + 1,
-          title: ch.title || `第${cIdx + 1}章`,
-          summary: ch.summary || '',
-          content: existingChap?.content || '',
-          wordCount: existingChap?.wordCount || 0,
-          status: existingChap?.status || ('draft' as const),
-        };
-      });
+      const startChapNum = precedingVolumes.reduce((acc, v) => acc + (v.chapters?.length || 0), 0) + 1;
+      const updatedChapters = enforceExactChaptersForVolume(
+        newChaptersFromAi,
+        recastChapterCount,
+        startChapNum,
+        recastingVolume.volumeNumber,
+        newVolTitle
+      );
 
       const updatedVolumes = novel.volumes.map((v) => {
         if (v.id === recastingVolume.id) {

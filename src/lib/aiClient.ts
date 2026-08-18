@@ -236,6 +236,18 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
   } else if (path.includes('/generate-outline')) {
     const vCount = payload.volumeCount || 3;
     const cCount = payload.chapterCount || 5;
+    let specifiedStr = "";
+    if (payload.title && payload.title !== "未命名小说") specifiedStr += `- 指定书名: 《${payload.title}》\n`;
+    if (payload.logline) specifiedStr += `- 指定看点: ${payload.logline}\n`;
+    if (payload.worldBuilding) {
+      if (payload.worldBuilding.background) specifiedStr += `- 指定背景: ${payload.worldBuilding.background}\n`;
+      if (payload.worldBuilding.powerSystem) specifiedStr += `- 指定力量体系: ${payload.worldBuilding.powerSystem}\n`;
+      if (payload.worldBuilding.factions) specifiedStr += `- 指定势力: ${payload.worldBuilding.factions}\n`;
+    }
+    if (Array.isArray(payload.characters) && payload.characters.length > 0) {
+      specifiedStr += `- 指定角色: ${payload.characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description}`).join('; ')}\n`;
+    }
+
     prompt = `你是一位经验丰富、畅销网文白金作家和资深主编。
 请为以下小说构思完整的分卷与章节大纲：
 - 书名/主题创意: ${payload.prompt || payload.title || '修仙玄幻大作'}
@@ -245,8 +257,12 @@ export async function callAiApi(path: string, payload: any): Promise<any> {
 - 命名风格: ${payload.titleStyle || '通俗白话风'}
 - 要求生成分卷数量: ${vCount} 卷
 - 每卷章节数量: ${cCount} 章
+${specifiedStr ? `【用户指定的已有设定与规则，必须 100% 完全遵循】:\n${specifiedStr}` : ''}
 
-必须返回且仅返回严格的标准 JSON 格式数据（不要带有 markdown 外套或其它文字说明）。
+【强制规则】：
+1. 绝对严禁改变用户指定的主角姓名或力量体系！如用户给出了指定数据，必须 100% 原样采用！
+2. 返回且仅返回严格的标准 JSON 格式数据（不要带有 markdown 外套或其它文字说明）。
+
 JSON 数据格式必须为：
 {
   "title": "精美书名",
@@ -278,12 +294,19 @@ JSON 数据格式必须为：
     const totalExistingChapters = existing.reduce((acc: number, vol: any) => acc + (vol.chapters?.length || 0), 0);
     const nextChapStart = totalExistingChapters + 1;
 
+    let charStr = "";
+    if (Array.isArray(payload.characters) && payload.characters.length > 0) {
+      charStr = payload.characters.map((c: any) => `【${c.name}】(${c.role})`).join(', ');
+    }
+
     prompt = `你是一位经验丰富、畅销网文白金作家和资深主编。
 请根据以下前情提要与前卷剧情，为小说《${payload.title || '小说'}》续接后续的分卷与章节剧情大纲。
 - 题材流派: ${payload.genre || '玄幻/修仙'}
 - 续接要求: ${payload.prompt || '顺理成章推进高潮'}
-- 要求生成新分卷数量: ${vCount} 个新分卷（从第 ${lastVolNum + 1} 卷开始）
+${charStr ? `- 主要角色: ${charStr}\n` : ''}- 要求生成新分卷数量: ${vCount} 个新分卷（从第 ${lastVolNum + 1} 卷开始）
 - 每卷章节数量: ${cCount} 章（章节编号必须从第 ${nextChapStart} 章全局连续递增）
+
+【强制规则】：必须 100% 保持主角与配角姓名、世界观设定一致，严禁更改主角名或世界观规则！
 
 已有前卷结构：
 ${JSON.stringify(existing)}
@@ -303,14 +326,22 @@ JSON 数据格式必须为：
   ]
 }`;
   } else if (path.includes('/generate-chapter')) {
+    let charsInfo = "";
+    if (Array.isArray(payload.novelContext?.characters) && payload.novelContext.characters.length > 0) {
+      charsInfo = payload.novelContext.characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description}`).join('; ');
+    }
     prompt = `请根据以下小说设定和上下文创作章节正文：
-小说书名：${payload.novelContext?.title}
+小说书名：《${payload.novelContext?.title}》
 题材：${payload.novelContext?.genre}
+${charsInfo ? `指定角色集（必须严格遵守主角及角色姓名）: ${charsInfo}\n` : ''}背景设定：${payload.novelContext?.worldBuilding?.background || ''}
+力量体系：${payload.novelContext?.worldBuilding?.powerSystem || ''}
 当前卷：${payload.currentVolumeTitle}
 章节标题：${payload.chapterTitle}
 章节摘要大纲：${payload.chapterSummary}
 前文剧情回顾：${payload.previousChapterContext || '无'}
 字数要求：大约 ${payload.chapterMinWords || 2000} - ${payload.chapterMaxWords || 4000} 字。
+
+【强制最高规则】：正文必须 100% 严格采用上述指定的主角及角色姓名与人设，严禁擅自更换主角名字或捏造矛盾设定！
 请直接输出流畅细腻的章节正文内容，情节生动，文笔优美。`;
   } else if (path.includes('/continue-chapter')) {
     prompt = `请根据以下前文内容续写小说章节《${payload.chapterTitle}》：

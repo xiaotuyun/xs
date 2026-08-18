@@ -1156,10 +1156,94 @@ app.post("/api/ai/test-model", async (req, res) => {
   }
 });
 
+function enforceVolumeAndChapterCounts(
+  rawVolumes: any[],
+  targetVolCount: number,
+  targetChapCount: number,
+  startVolNum = 1,
+  startChapNum = 1
+) {
+  const existingVols = Array.isArray(rawVolumes) ? rawVolumes : [];
+  const resultVolumes: any[] = [];
+  let globalChapIndex = startChapNum;
+
+  const defaultVolThemes = [
+    "崛起微末篇",
+    "风云争锋篇",
+    "动荡变革篇",
+    "巅峰对决篇",
+    "寰宇纵横篇",
+    "大道归一篇",
+    "万界主宰篇",
+    "神话终局篇"
+  ];
+
+  const defaultChapThemes = [
+    "风云初动与暗流微显",
+    "局势突变与针锋相对",
+    "步步为营与破局转机",
+    "锋芒毕露与力挽狂澜",
+    "绝处逢生与底牌尽出",
+    "强敌来袭与生死决战",
+    "尘埃落定与更远征途",
+    "造化机缘与实力跃迁",
+    "秘境探幽与重重杀机",
+    "终极对决与名动天下"
+  ];
+
+  for (let v = 0; v < targetVolCount; v++) {
+    const currentVolNum = startVolNum + v;
+    const rawVol = existingVols[v];
+    const volTitle = rawVol && rawVol.volumeTitle ? String(rawVol.volumeTitle).trim() : `第${currentVolNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
+    const volSummary = rawVol && rawVol.summary ? String(rawVol.summary).trim() : `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`;
+
+    const rawChapters = rawVol && Array.isArray(rawVol.chapters) ? rawVol.chapters : [];
+    const formattedChapters: any[] = [];
+
+    for (let c = 0; c < targetChapCount; c++) {
+      const chapIndex = globalChapIndex++;
+      const rawChap = rawChapters[c];
+
+      if (rawChap) {
+        let chapTitle = rawChap.title ? String(rawChap.title).trim() : "";
+        const cleanTitle = chapTitle.replace(/^第\s*[0-9一二三四五六七八九十百千万]+\s*章[\s：:\-—]*/i, '').replace(/^Chapter\s*\d+[\s：:\-—]*/i, '').trim();
+        chapTitle = `第${chapIndex}章 ${cleanTitle || defaultChapThemes[c % defaultChapThemes.length]}`;
+        const chapSummary = rawChap.summary && String(rawChap.summary).trim()
+          ? String(rawChap.summary).trim()
+          : `本章紧承前文剧情，主角在当前局势中展开行动，推进核心冲突与伏笔。`;
+
+        formattedChapters.push({
+          chapterNumber: chapIndex,
+          title: chapTitle,
+          summary: chapSummary,
+        });
+      } else {
+        const fallbackTitle = `第${chapIndex}章 ${defaultChapThemes[c % defaultChapThemes.length]}`;
+        const fallbackSummary = `本章紧密承接上文剧情发展，主角深入探索核心线索，局势迎来关键突破与剧情转折。`;
+
+        formattedChapters.push({
+          chapterNumber: chapIndex,
+          title: fallbackTitle,
+          summary: fallbackSummary,
+        });
+      }
+    }
+
+    resultVolumes.push({
+      volumeNumber: currentVolNum,
+      volumeTitle: volTitle,
+      summary: volSummary,
+      chapters: formattedChapters,
+    });
+  }
+
+  return resultVolumes;
+}
+
 app.post("/api/ai/generate-outline", async (req, res) => {
   try {
     const config = getEffectiveAiConfig(req.body);
-    const { prompt, genre, targetLength, tone, titleStyle, volumeCount, chapterCount } = req.body;
+    const { prompt, genre, targetLength, tone, titleStyle, volumeCount, chapterCount, worldBuilding, characters, title, logline } = req.body;
     if (!config.apiKey) {
       return res.status(400).json({ success: false, error: "未配置 API Key，请先在右上角【设置】进行配置或在环境变量中定义。" });
     }
@@ -1174,19 +1258,46 @@ app.post("/api/ai/generate-outline", async (req, res) => {
     const parsedVolumeCount = parseInt(volumeCount, 10) || 3;
     const parsedChapterCount = parseInt(chapterCount, 10) || 5;
 
+    let specifiedDataContext = "";
+    if (title && title !== "未命名小说") specifiedDataContext += `- 指定书名: 《${title}》\n`;
+    if (logline) specifiedDataContext += `- 指定看点/简介: ${logline}\n`;
+
+    if (worldBuilding) {
+      if (worldBuilding.background) specifiedDataContext += `- 指定世界背景: ${worldBuilding.background}\n`;
+      if (worldBuilding.powerSystem) specifiedDataContext += `- 指定力量体系/境界等级: ${worldBuilding.powerSystem}\n`;
+      if (worldBuilding.factions) specifiedDataContext += `- 指定势力/宗门分布: ${worldBuilding.factions}\n`;
+      if (Array.isArray(worldBuilding.customItems) && worldBuilding.customItems.length > 0) {
+        const itemsStr = worldBuilding.customItems.map((ci: any) => `${ci.title}: ${ci.content}`).join("; ");
+        specifiedDataContext += `- 指定额外设定集: ${itemsStr}\n`;
+      }
+    }
+
+    if (Array.isArray(characters) && characters.length > 0) {
+      const charsStr = characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description} (背景/动机: ${c.background})`).join('\n  ');
+      specifiedDataContext += `- 指定已有角色列表:\n  ${charsStr}\n`;
+    }
+
     const systemInstruction = `你是一位经验丰富、畅销网文白金作家和资深主编。
 请根据用户的创意构思，为一部高质量的网络小说生成全面、详尽、宏大的全书大纲、世界观背景和主要角色设定。
 
-【极其重要】：必须严格按照以下数量与编号结构生成：
+【最高绝对规则 - 100%忠实于用户指定的数据与灵感】:
+1. 严禁改动与忽略用户指定的数据！如果用户在创意灵感、或下方【指定已有设定与角色数据】中，给出了明确的【书名】、【主角姓名】、【角色性格人设】、【力量体系/境界名称】、【世界观格局】或【特定剧情要求】，你必须【100%完全采用与继承用户指定的数据和命名】！
+2. 绝对不能擅自更换主角姓名（例如用户指定主角叫“叶辰”，绝对不能改成“林凡”或“陆枫”）。
+3. 绝对不能擅自修改用户指定的力量体系境界名称。如果用户设定了具体境界，大纲和章节中提及实力时必须严格符合该体系。
+4. 如果用户未明确指定书名或角色，你可以根据创意推导；但只要用户有指定，必须优先完全匹配用户指定数据！
+
+【极其重要 - 严格数量约束】:
 - volumes (分卷): 必须生成刚好 【${parsedVolumeCount} 个分卷】，每一卷都要有分卷标题与剧情概要。
 - chapters (章节): 每个分卷内必须生成刚好 【${parsedChapterCount} 个具体的章节】（包含详细的章节序号、标题和章节剧情概要）。
-- **【全书章节全局递增连贯编号规范】**：全书所有分卷中的章节必须保持全局统一连贯递增编号（例如：第一卷包含第1~5章，第二卷必须接续为第6~10章，第三卷必须接续为第11~15章），严禁各个分卷单独重置为第1章或“第一章”！
-- **【章节标题格式规范】**：所有章节标题统一格式为 \`第X章 标题\`（如：\`第1章 穿越异界\`、\`第6章 强敌来袭\`），严禁使用“第一章”等中文大写或单独重置！
+- **【全书章节全局递增连贯编号规范】**：全书所有分卷中的章节必须保持全局统一连贯递增编号（例如：第一卷包含第1~${parsedChapterCount}章，第二卷必须接续为第${parsedChapterCount + 1}~${parsedChapterCount * 2}章），严禁各个分卷单独重置为第1章或“第一章”！
+- **【章节标题格式规范】**：所有章节标题统一格式为 \`第X章 标题\`（如：\`第1章 穿越异界\`、\`第${parsedChapterCount + 1}章 强敌来袭\`），严禁使用“第一章”等中文大写或单独重置！
 
 小说流派: ${genre || "玄幻/奇幻"}
 预估篇幅: ${targetLength || "中篇 (100万字)"}
 文风基调: ${tone || "热血爽快、逻辑严密、节奏紧凑"}
 命名风格偏好: ${titleStyle || "通俗白话风"}
+
+${specifiedDataContext ? `【用户指定的已有设定与限制数据】:\n${specifiedDataContext}\n` : ''}
 
 【命名与标题风格规范】：
 - 严格遵循用户指定的"命名风格偏好"。
@@ -1198,7 +1309,7 @@ app.post("/api/ai/generate-outline", async (req, res) => {
 必须返回且仅返回严格的标准 JSON 格式数据（不要带有 markdown 外套或其它文字说明）。
 JSON 数据格式必须精准符合以下 JSON 规范：
 {
-  "title": "根据创意推导的精美书名",
+  "title": "根据创意/指定数据推导的精美书名",
   "logline": "一句话故事核心看点与剧情梗概",
   "worldBuilding": {
     "background": "时代背景与世界格局",
@@ -1246,6 +1357,17 @@ JSON 数据格式必须精准符合以下 JSON 规范：
     } catch (parseErr) {
       console.warn("JSON parse warning:", parseErr);
       resultJson = JSON.parse(text || "{}");
+    }
+
+    if (resultJson) {
+      const rawVols = resultJson.volumes || resultJson.newVolumes || [];
+      resultJson.volumes = enforceVolumeAndChapterCounts(
+        rawVols,
+        parsedVolumeCount,
+        parsedChapterCount,
+        1,
+        1
+      );
     }
 
     res.json({ success: true, data: resultJson });
@@ -1309,8 +1431,27 @@ app.post("/api/ai/extend-outline", async (req, res) => {
       : 0;
     const nextChapStartNum = totalExistingChapters + 1;
 
+    let worldContext = "";
+    if (worldBuilding) {
+      if (worldBuilding.background) worldContext += `- 背景格局: ${worldBuilding.background}\n`;
+      if (worldBuilding.powerSystem) worldContext += `- 力量体系: ${worldBuilding.powerSystem}\n`;
+      if (worldBuilding.factions) worldContext += `- 势力分布: ${worldBuilding.factions}\n`;
+      if (Array.isArray(worldBuilding.customItems) && worldBuilding.customItems.length > 0) {
+        const itemsStr = worldBuilding.customItems.map((ci: any) => `${ci.title}: ${ci.content}`).join("; ");
+        worldContext += `- 扩展设定: ${itemsStr}\n`;
+      }
+    }
+    let charContext = "";
+    if (Array.isArray(characters) && characters.length > 0) {
+      charContext = characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description} (背景/动机: ${c.background})`).join('\n  ');
+    }
+
     const systemInstruction = `你是一位经验丰富、畅销网文白金作家和资深主编。
 你的任务是根据一部已有作品的前情提要与前卷剧情，为该小说**续接后续的分卷与章节剧情大纲**。
+
+【最高绝对规则 - 忠实于指定设定与角色数据】:
+1. 续接大纲必须【100%完全保持与已有世界观、力量体系、核心主角与配角姓名一致】，严禁擅自改变主角姓名或捏造冲突的力量体系！
+2. 绝对不能替换主角名字（如主角名已确定，不能改名）。
 
 【前情信息】:
 - 书名: 《${title || "未命名小说"}》
@@ -1319,6 +1460,8 @@ app.post("/api/ai/extend-outline", async (req, res) => {
 - 续接篇幅预估: ${targetLength || "中篇 (100万字)"}
 - 文风基调: ${tone || "热血爽快、逻辑严密、节奏紧凑"}
 - 命名风格偏好: ${titleStyle || "通俗白话风"}
+${worldContext ? `\n【已有世界观设定】:\n${worldContext}` : ''}
+${charContext ? `\n【已有主要角色集】:\n  ${charContext}` : ''}
 
 【已有前卷剧情与目录结构】:
 ${historyText}
@@ -1366,12 +1509,16 @@ JSON 数据格式必须为：
     }
 
     if (resultJson) {
-      if (resultJson.volumes && !resultJson.newVolumes) {
-        resultJson.newVolumes = resultJson.volumes;
-      }
-      if (resultJson.newVolumes && !resultJson.volumes) {
-        resultJson.volumes = resultJson.newVolumes;
-      }
+      const rawVols = resultJson.newVolumes || resultJson.volumes || [];
+      const normalizedNewVols = enforceVolumeAndChapterCounts(
+        rawVols,
+        parsedVolumeCount,
+        parsedChapterCount,
+        lastVolNum + 1,
+        nextChapStartNum
+      );
+      resultJson.newVolumes = normalizedNewVols;
+      resultJson.volumes = normalizedNewVols;
     }
 
     res.json({ success: true, data: resultJson });
@@ -1453,7 +1600,10 @@ JSON 输出格式样例：
       "summary": "重铸后的章节剧情大纲与精彩看点"
     }
   ]
-}`;
+}
+
+【最高绝对规则 - 100%忠实于用户指定数据】:
+如果用户指定了角色名字或世界观设定，必须完全保持一致，严禁擅自改写！`;
 
     const userPrompt = `重铸方向 / 用户精修修改指令: ${recastPrompt || "重新梳理本卷大纲，增强冲突与剧情节奏，精细化各个章节大纲"}`;
 
@@ -1472,6 +1622,26 @@ JSON 输出格式样例：
     } catch (parseErr) {
       console.warn("JSON parse warning:", parseErr);
       resultJson = JSON.parse(text || "{}");
+    }
+
+    if (resultJson) {
+      const mockVolArray = [{
+        volumeTitle: resultJson.volumeTitle,
+        summary: resultJson.summary,
+        chapters: resultJson.chapters
+      }];
+      const normalized = enforceVolumeAndChapterCounts(
+        mockVolArray,
+        1,
+        parsedChapterCount,
+        targetVolume?.volumeNumber || 1,
+        startChapNum
+      );
+      if (normalized[0]) {
+        resultJson.volumeTitle = normalized[0].volumeTitle;
+        resultJson.summary = normalized[0].summary;
+        resultJson.chapters = normalized[0].chapters;
+      }
     }
 
     res.json({ success: true, data: resultJson });
@@ -1512,6 +1682,16 @@ ${previousChapterContext.prevContentSnippet}
 【剧情承接硬性要求】：本章为 ${currentVolumeTitle ? `分卷《${currentVolumeTitle}》` : '新章节'}，请务必紧扣并自然接续上一章/上一分卷结尾的剧情脉络、人物状态与未尽伏笔，实现无缝剧情过渡！\n`;
     }
 
+    let charContext = "";
+    if (Array.isArray(novelContext?.characters) && novelContext.characters.length > 0) {
+      charContext = novelContext.characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description} (背景/动机: ${c.background})`).join('\n  ');
+    }
+
+    let customWorldContext = "";
+    if (Array.isArray(novelContext?.worldBuilding?.customItems) && novelContext.worldBuilding.customItems.length > 0) {
+      customWorldContext = novelContext.worldBuilding.customItems.map((item: any) => `【${item.title}】: ${item.content}`).join('\n  ');
+    }
+
     const wordRequirementPrompt = `【极其重要的字数硬性控制（目标：${minW} - ${maxW} 字）】：
 本章纯字数必须严格控制在 **${minW} 至 ${maxW} 字之间**（最佳目标约 ${Math.round((minW + maxW)/2)} 字）。
 1. 不得少于 ${minW} 字，但也绝对不能超出 ${maxW} 字！请根据目标字数合理掌控叙事节奏与场景细节。
@@ -1520,11 +1700,22 @@ ${previousChapterContext.prevContentSnippet}
     const systemInstruction = `你是一位顶尖的畅销网络小说白金作家，擅长创作画面感强、细节丰富、节奏抓人、张力十足的章节。
 
 小说基本信息:
-书名: ${novelContext?.title || "未知小说"}
+书名: 《${novelContext?.title || "未知小说"}》
 流派: ${novelContext?.genre || "奇幻"}
-背景设定: ${novelContext?.worldBuilding?.background || ""}
-力量体系: ${novelContext?.worldBuilding?.powerSystem || ""}
 文风基调: ${tone || "细腻生动、注重对话和动作描写、拒绝水字数、高潮迭起"}
+
+【登场角色人设集（必须 100% 严格遵守，严禁更改主角或角色姓名）】:
+  ${charContext || "请严格参照大纲与角色设定，严禁擅自改动主角与角色名字！"}
+
+【力量体系与世界观设定（必须 100% 严格遵守）】:
+- 背景格局: ${novelContext?.worldBuilding?.background || "详见大纲"}
+- 力量体系/境界: ${novelContext?.worldBuilding?.powerSystem || "详见大纲"}
+- 势力分布: ${novelContext?.worldBuilding?.factions || "详见大纲"}
+${customWorldContext ? `- 扩展设定:\n  ${customWorldContext}` : ''}
+
+【绝对遵从用户指定数据与设定规则】：
+1. 必须 100% 严格使用上述指定的主角及角色姓名与人设（如主角叫什么就必须用什么），严禁擅自改变主角姓名或替换为其他网文主角名！
+2. 必须 100% 遵循上述指定的力量体系境界与世界观规则，严禁出现违背体系的技能或境界！
 ${prevContextPrompt}
 ${wordRequirementPrompt}
 

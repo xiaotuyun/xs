@@ -295,12 +295,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
+      const fullNovelContext = {
+        title: novel.title,
+        genre: novel.genre,
+        logline: novel.logline,
+        worldBuilding: novel.worldBuilding,
+        characters: novel.characters,
+      };
+
       const data = await callAiApi('/api/ai/generate-chapter', {
-        novelContext: {
-          title: novel.title,
-          genre: novel.genre,
-          worldBuilding: novel.worldBuilding,
-        },
+        novelContext: fullNovelContext,
         chapterTitle: title,
         chapterSummary: summary,
         tone: novel.tone,
@@ -335,10 +339,18 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
+      const fullNovelContext = {
+        title: novel.title,
+        genre: novel.genre,
+        logline: novel.logline,
+        worldBuilding: novel.worldBuilding,
+        characters: novel.characters,
+      };
+
       const data = await callAiApi('/api/ai/continue-chapter', {
         currentText: content,
         chapterSummary: summary,
-        novelContext: { title: novel.title },
+        novelContext: fullNovelContext,
         apiKey,
         model,
         chapterMinWords: tempMinWords,
@@ -370,16 +382,20 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
     try {
       const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
+      const fullNovelContext = {
+        title: novel.title,
+        genre: novel.genre,
+        logline: novel.logline,
+        worldBuilding: novel.worldBuilding,
+        characters: novel.characters,
+      };
+
       const data = await callAiApi('/api/ai/polish-chapter', {
         currentText: content,
         instruction: polishInstruction,
         chapterMinWords: tempMinWords,
         chapterMaxWords: tempMaxWords,
-        novelContext: {
-          title: novel.title,
-          genre: novel.genre,
-          tone: novel.tone,
-        },
+        novelContext: fullNovelContext,
         apiKey,
         model,
         customBaseUrl,

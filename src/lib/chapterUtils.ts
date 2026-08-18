@@ -110,6 +110,151 @@ export function sortChapters<T extends Chapter>(chapters: T[]): T[] {
 }
 
 /**
+ * Enforces that a single volume contains exactly the specified number of chapters.
+ * If AI returned fewer chapters, synthesizes and appends missing chapters with coherent plot titles.
+ * If AI returned more chapters, cleanly truncates to target count.
+ */
+export function enforceExactChaptersForVolume(
+  rawChapters: any[],
+  targetChapCount: number,
+  startChapNumber = 1,
+  volNumber = 1,
+  volTitle = ""
+): Chapter[] {
+  const existing = Array.isArray(rawChapters) ? rawChapters : [];
+  const chapters: Chapter[] = [];
+
+  const defaultTitleThemes = [
+    "风云初动与暗流微显",
+    "局势突变与针锋相对",
+    "步步为营与破局转机",
+    "锋芒毕露与力挽狂澜",
+    "绝处逢生与底牌尽出",
+    "强敌来袭与生死决战",
+    "尘埃落定与更远征途",
+    "造化机缘与实力跃迁",
+    "秘境探幽与重重杀机",
+    "终极对决与名动天下"
+  ];
+
+  for (let c = 0; c < targetChapCount; c++) {
+    const chapIndex = startChapNumber + c;
+    const rawChap = existing[c];
+
+    if (rawChap) {
+      const rawTitle = rawChap.title ? String(rawChap.title).trim() : "";
+      const normalizedTitle = rawTitle ? replaceChapterTitleNumber(rawTitle, chapIndex) : `第${chapIndex}章 ${defaultTitleThemes[c % defaultTitleThemes.length]}`;
+      const normalizedSummary = rawChap.summary ? String(rawChap.summary).trim() : `本章剧情紧承前文，主角在当前局势中展开行动，推进核心冲突与伏笔。`;
+
+      chapters.push({
+        id: rawChap.id || `chap-${Date.now()}-${volNumber}-${c}`,
+        chapterNumber: chapIndex,
+        title: normalizedTitle,
+        summary: normalizedSummary,
+        content: rawChap.content || '',
+        wordCount: rawChap.wordCount || 0,
+        status: rawChap.status || 'draft',
+      });
+    } else {
+      const fallbackTitle = `第${chapIndex}章 ${defaultTitleThemes[c % defaultTitleThemes.length]}`;
+      const fallbackSummary = `本章紧密承接上文剧情发展，主角深入探索核心线索，局势迎来关键突破与剧情转折。`;
+
+      chapters.push({
+        id: `chap-${Date.now()}-${volNumber}-${c}`,
+        chapterNumber: chapIndex,
+        title: fallbackTitle,
+        summary: fallbackSummary,
+        content: '',
+        wordCount: 0,
+        status: 'draft',
+      });
+    }
+  }
+
+  return chapters;
+}
+
+/**
+ * Enforces that an outline contains EXACTLY the specified number of volumes,
+ * and that each volume contains EXACTLY the specified number of chapters.
+ * Guarantees 100% adherence to user-selected volumeCount and chapterCount.
+ */
+export function enforceExactVolumesAndChapters(
+  rawVolumes: any[],
+  targetVolCount: number,
+  targetChapCount: number,
+  startVolNum = 1,
+  startChapNum = 1,
+  existingNovelVolumes?: Volume[]
+): Volume[] {
+  const existingVols = Array.isArray(rawVolumes) ? rawVolumes : [];
+  const volumes: Volume[] = [];
+  let currentChapIndex = startChapNum;
+
+  const defaultVolThemes = [
+    "崛起微末篇",
+    "风云争锋篇",
+    "动荡变革篇",
+    "巅峰对决篇",
+    "寰宇纵横篇",
+    "大道归一篇",
+    "万界主宰篇",
+    "神话终局篇"
+  ];
+
+  for (let v = 0; v < targetVolCount; v++) {
+    const volNum = startVolNum + v;
+    const rawVol = existingVols[v];
+    const existingVol = existingNovelVolumes ? existingNovelVolumes[v] : undefined;
+
+    let volTitle = "";
+    let volSummary = "";
+
+    if (rawVol) {
+      volTitle = rawVol.volumeTitle ? String(rawVol.volumeTitle).trim() : `第${volNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
+      volSummary = rawVol.summary ? String(rawVol.summary).trim() : `本卷围绕核心冲突展开，剧情层层递进，将全书主线推向阶段性高潮。`;
+    } else {
+      volTitle = `第${volNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
+      volSummary = `本卷围绕核心冲突展开，主角实力与眼界进一步拓展，迎来更为宏大的交锋与挑战。`;
+    }
+
+    const rawChaps = rawVol ? (rawVol.chapters || rawVol.newChapters || []) : [];
+    const formattedChapters = enforceExactChaptersForVolume(
+      rawChaps,
+      targetChapCount,
+      currentChapIndex,
+      volNum,
+      volTitle
+    );
+
+    // If existing chapters exist in the novel (e.g. updating current novel), preserve their contents
+    if (existingVol) {
+      formattedChapters.forEach((ch, idx) => {
+        const existCh = existingVol.chapters[idx] || existingVol.chapters.find(item => item.chapterNumber === ch.chapterNumber);
+        if (existCh) {
+          ch.id = existCh.id;
+          ch.content = existCh.content || ch.content;
+          ch.wordCount = existCh.wordCount || ch.wordCount;
+          ch.status = existCh.status || ch.status;
+        }
+      });
+    }
+
+    currentChapIndex += targetChapCount;
+
+    volumes.push({
+      id: (existingVol?.id) || rawVol?.id || `vol-${Date.now()}-${v}`,
+      volumeNumber: volNum,
+      volumeTitle: volTitle,
+      summary: volSummary,
+      chapters: formattedChapters,
+    });
+  }
+
+  return volumes;
+}
+
+/**
  * Normalizes all volumes and chapters across a novel so that:
  * 1. Chapters are globally indexed 1, 2, 3... N across all volumes in order.
  * 2. `chapterNumber` is updated to equal global index.
@@ -140,3 +285,5 @@ export function normalizeNovelChaptersAndTitles(volumes: Volume[]): Volume[] {
     };
   });
 }
+
+
