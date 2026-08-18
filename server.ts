@@ -1232,6 +1232,72 @@ function cleanChapterTitle(title: any, chapIndex: number, defaultTheme = ''): st
   return `第${chapIndex}章 ${cleaned || defaultTheme || '章节内容'}`.trim();
 }
 
+function cleanNovelContent(rawText: any): string {
+  if (rawText === null || rawText === undefined) return '';
+  if (typeof rawText === 'object') {
+    if (rawText.content) return cleanNovelContent(rawText.content);
+    if (rawText.text) return cleanNovelContent(rawText.text);
+    if (rawText.response) return cleanNovelContent(rawText.response);
+  }
+
+  let text = String(rawText).trim();
+
+  // 1. Strip DeepSeek / Qwen reasoning <think> ... </think> blocks
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // 2. Strip JSON wrappers if the model returned { "content": "..." } or similar
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object') {
+        const inner = parsed.content || parsed.text || parsed.chapter || parsed.chapterContent || parsed.body;
+        if (typeof inner === 'string' && inner.trim()) {
+          text = inner.trim();
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Strip Markdown code fences
+  text = text.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // 4. Strip English conversational preambles/fillers at the beginning of the text
+  const englishPreamblePatterns = [
+    /^(?:Sure(?: thing)?[!.,]?|Certainly[!.,]?|Of course[!.,]?|Here(?:'s| is) (?:the |your )?(?:chapter|continuation|story|novel|text|polished version|revised chapter|response)[^:\n]*[:：]?)\s*/i,
+    /^(?:Here is the translated|Here is the generated|Here is what happens next|Below is the chapter|Following is the chapter)[^:\n]*[:：]?\s*/i,
+    /^(?:Chapter\s*\d+[^:\n]*[:：]?)\s*/i,
+    /^(?:Title|Summary|Scene|Content)\s*[:：]\s*/i,
+    /^(?:Here is (?:a|the) (?:continuation|draft|scene))[^:\n]*[:：]?\s*/i,
+    /^Okay,?\s*(?:here is|I will|let's)[^:\n]*[:：]?\s*/i,
+  ];
+
+  let cleaned = true;
+  while (cleaned) {
+    cleaned = false;
+    for (const pat of englishPreamblePatterns) {
+      if (pat.test(text)) {
+        text = text.replace(pat, '').trim();
+        cleaned = true;
+      }
+    }
+  }
+
+  // 5. Strip English conversational postambles at the end of the text
+  const englishPostamblePatterns = [
+    /(?:\n|^)\s*(?:I hope (?:this|you) (?:helps|enjoy|like)[^\n]*)$/i,
+    /(?:\n|^)\s*(?:Let me know if (?:you (?:need|want)|you'd like)[^\n]*)$/i,
+    /(?:\n|^)\s*(?:To be continued(?:\s*in\s*the\s*next\s*chapter)?(?:\.{3}|…)?)$/i,
+    /(?:\n|^)\s*(?:Hope this meets your (?:requirements|expectations)[^\n]*)$/i,
+    /(?:\n|^)\s*(?:If you need further (?:revisions|adjustments|chapters)[^\n]*)$/i,
+  ];
+
+  for (const pat of englishPostamblePatterns) {
+    text = text.replace(pat, '').trim();
+  }
+
+  return text;
+}
+
 function safeParseAiJson(rawText: string): any {
   if (!rawText) return {};
 
@@ -1388,6 +1454,9 @@ app.post("/api/ai/generate-outline", async (req, res) => {
 
     const systemInstruction = `你是一位经验丰富、畅销网文白金作家和资深主编。
 请根据用户的创意构思，为一部高质量的网络小说生成全面、详尽、宏大的全书大纲、世界观背景和主要角色设定。
+
+【最高语言指令 - 100%纯简体中文】:
+本书为中文网络小说，书名、一句话简介、世界观背景、力量体系、势力分布、角色姓名、角色人设、分卷标题、分卷概要、章节标题与章节概要必须【100%全程使用地道、优美、纯正的简体中文撰写】！绝对严禁夹杂任何英文（如 Chapter 1、Summary、Title、Background、Power System 等英文单词或英文解释）！
 
 【最高绝对规则 - 100%忠实于用户指定的数据与灵感】:
 1. 严禁改动与忽略用户指定的数据！如果用户在创意灵感、或下方【指定已有设定与角色数据】中，给出了明确的【书名】、【主角姓名】、【角色性格人设】、【力量体系/境界名称】、【世界观格局】或【特定剧情要求】，你必须【100%完全采用与继承用户指定的数据和命名】！
@@ -1562,6 +1631,9 @@ app.post("/api/ai/extend-outline", async (req, res) => {
     const systemInstruction = `你是一位经验丰富、畅销网文白金作家和资深主编。
 你的任务是根据一部已有作品的前情提要与前卷剧情，为该小说**续接后续的分卷与章节剧情大纲**。
 
+【最高语言指令 - 100%纯简体中文】:
+续接的新分卷标题、分卷概要、章节标题与章节概要必须【100%全程使用纯正地道的简体中文撰写】！严禁夹杂任何英文（如 Chapter、Title、Summary 等）！
+
 【最高绝对规则 - 忠实于指定设定与角色数据】:
 1. 续接大纲必须【100%完全保持与已有世界观、力量体系、核心主角与配角姓名一致】，严禁擅自改变主角姓名或捏造冲突的力量体系！
 2. 绝对不能替换主角名字（如主角名已确定，不能改名）。
@@ -1668,6 +1740,9 @@ app.post("/api/ai/recast-volume", async (req, res) => {
 
     const systemInstruction = `你是一位畅销网络小说白金作家与资深大纲编剧。
 你的任务是根据作品整体设定和用户指定的精修调整指令，对【第 ${targetVolume?.volumeNumber || 1} 卷】的大纲进行**重新雕琢、改写与重铸**。
+
+【最高语言指令 - 100%纯简体中文】:
+重铸后的分卷标题、分卷概要、章节标题与章节概要必须【100%全程使用地道优美的纯正简体中文撰写】！严禁夹杂任何英文！
 
 【作品基本信息】:
 - 书名: 《${title || "未命名小说"}》
@@ -1793,6 +1868,9 @@ ${previousChapterContext.prevContentSnippet}
 
     const systemInstruction = `你是一位顶尖的畅销网络小说白金作家，擅长创作画面感强、细节丰富、节奏抓人、张力十足的章节。
 
+【最高语言指令 - 100%纯简体中文】:
+本书为中文网络小说，正文必须【100%全程使用地道、优美、纯正的简体中文撰写】！绝对严禁输出任何英文前缀（如 Chapter 1、Here is the story、Certainly! 等）、英文废话、英文标头或中英混杂！直接输出纯正小说正文！
+
 小说基本信息:
 书名: 《${novelContext?.title || "未知小说"}》
 流派: ${novelContext?.genre || "奇幻"}
@@ -1823,7 +1901,7 @@ ${currentVolumeTitle ? `所属分卷: ${currentVolumeTitle}\n` : ''}本章剧情
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     const tokenCap = Math.min(8192, Math.max(3500, Math.floor(maxW * 2.5)));
     let text = await generateContent(activeKey, activeModel, contents, 0.8, customBaseUrl, useChatCompletions, tokenCap);
-    text = (text || "").replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
+    text = cleanNovelContent(text);
 
     // Auto-continuation loop if initial word count is below required minimum
     let fullContent = text;
@@ -1846,24 +1924,30 @@ ${fullContent.slice(-1800)}
 
 【续写指令】：
 当前章节字数尚未达到设定的最低字数要求（${minW}字）。请从前文末尾**无缝紧接创作**，继续深入推进情节！
-1. 顺应前文情节推演，展开接下来的高潮细节、场景互动、人物心理、动作描写与多轮对话。
-2. 严禁重复前文已写的语句。
-3. 保持与前文完全一致的文风与基调。
-4. 本次续写只需增加约 ${remainNeeded + 100} 字正文达标即可，切勿长篇大论超字数。
-5. 直接输出续写正文，不要包含任何额外开场白或 markdown 标记：`;
+1. 必须 100% 全程使用纯正简体中文撰写，严禁任何英文前缀或说明。
+2. 顺应前文情节推演，展开接下来的高潮细节、场景互动、人物心理、动作描写与多轮对话。
+3. 严禁重复前文已写的语句。
+4. 保持与前文完全一致的文风与基调。
+5. 本次续写只需增加约 ${remainNeeded + 100} 字正文达标即可，切勿长篇大论超字数。
+6. 直接输出续写正文，不要包含任何额外开场白或 markdown 标记：`;
 
       const piece = await generateContent(activeKey, activeModel, continuePrompt, 0.8, customBaseUrl, useChatCompletions, Math.max(1500, Math.floor((maxW - currentWords) * 2.2)), config.selectedModels);
       if (piece && piece.trim()) {
-        const cleanPiece = piece.replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
-        fullContent += "\n\n" + cleanPiece;
-        const newWordCount = countPureWords(fullContent);
-        if (newWordCount <= currentWords) break;
-        currentWords = newWordCount;
+        const cleanPiece = cleanNovelContent(piece);
+        if (cleanPiece) {
+          fullContent += "\n\n" + cleanPiece;
+          const newWordCount = countPureWords(fullContent);
+          if (newWordCount <= currentWords) break;
+          currentWords = newWordCount;
+        } else {
+          break;
+        }
       } else {
         break;
       }
     }
 
+    fullContent = cleanNovelContent(fullContent);
     if (countPureWords(fullContent) > maxW) {
       fullContent = trimTextToWordRange(fullContent, minW, maxW);
     }
@@ -1912,6 +1996,9 @@ app.post("/api/ai/continue-chapter", async (req, res) => {
 小说书名: 《${novelContext?.title || "未知小说"}》
 ${currentVolumeTitle ? `所属分卷: 《${currentVolumeTitle}》\n` : ''}本章大纲: ${chapterSummary || "无"}
 
+【最高语言指令 - 100%纯简体中文】:
+正文必须【100%全程使用地道、优美、纯正的简体中文撰写】！绝对严禁输出任何英文前缀、英文说明、中英混杂或 markdown 标签代码块！
+
 【绝对遵守的格式与剧情规范】：
 1. 必须只输出小说正文内容！严禁输出任何“好的”、“由于缺少前文...”等废话。
 2. 保持前文的语气、文风和人物性格，从前文末尾**无缝自然接续创作**。
@@ -1941,7 +2028,7 @@ ${previousChapterContext.prevContentSnippet}
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     const tokenCap = Math.min(8192, Math.max(2500, Math.floor(maxAllowedNew * 2.5)));
     let text = await generateContent(activeKey, activeModel, contents, 0.8, customBaseUrl, useChatCompletions, tokenCap, config.selectedModels);
-    text = (text || "").replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
+    text = cleanNovelContent(text);
 
     let combined = trimmedText ? trimmedText + "\n\n" + text : text;
     if (countPureWords(combined) > maxW) {
@@ -1955,6 +2042,7 @@ ${previousChapterContext.prevContentSnippet}
       newAppended = combined;
     }
 
+    newAppended = cleanNovelContent(newAppended);
     res.json({ success: true, content: newAppended || "" });
   } catch (error: any) {
     console.error("Continue chapter error:", error);
@@ -1988,6 +2076,9 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
 流派: ${novelContext?.genre || "奇幻"}
 基调: ${novelContext?.tone || "热血爽快、逻辑严密、节奏紧凑"}
 
+【最高语言指令 - 100%纯简体中文】:
+润色扩写后的正文必须【100%全程使用纯正、地道、优美的简体中文撰写】！绝对严禁输出任何英文前缀、英文解释或中英混杂！
+
 【润色与字数核心标准】：
 1. 完整保留原文的核心剧情发展、主要对话与关键事件，不得遗漏关键转折或随意改动剧情主线。
 2. 字数限制要求：润色优化后的完整章节正文，其纯字数（仅计算汉字、英文字母及数字，不含标点符号与空白符）必须**绝对大于或等于 ${minW} 字**（目标 ${minW} 到 ${maxW} 字）。
@@ -2009,7 +2100,7 @@ ${currentText || ""}
 
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     let text = await generateContent(activeKey, activeModel, contents, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
-    text = (text || "").replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
+    text = cleanNovelContent(text);
 
     // Auto-continuation/expansion loop if polished text is below minW
     let fullContent = text;
@@ -2033,15 +2124,16 @@ ${fullContent}
 【扩写与打磨强指令】：
 当前字数尚未达到设定的最低字数要求（${minW}字）。
 请对上述正文进行【深入细节扩充与全方位细化】：
-1. 深入扩展每一个主要场景的宏大氛围描写、光影细节与环境冲击。
-2. 丰富人物心理活动、五感体验与言谈神情细节。
-3. 增加更多有张力的人物交锋对话与微动作。
-4. 保持剧情脉络不变，将正文拓展为一篇不少于 ${minW} 字的完整高质量长章节。
-5. 请直接输出扩充润色后的完整正文：`;
+1. 必须 100% 全程使用纯正简体中文撰写，严禁任何英文。
+2. 深入扩展每一个主要场景的宏大氛围描写、光影细节与环境冲击。
+3. 丰富人物心理活动、五感体验与言谈神情细节。
+4. 增加更多有张力的人物交锋对话与微动作。
+5. 保持剧情脉络不变，将正文拓展为一篇不少于 ${minW} 字的完整高质量长章节。
+6. 请直接输出扩充润色后的完整正文：`;
 
       const expandedPiece = await generateContent(activeKey, activeModel, expandPrompt, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
       if (expandedPiece && expandedPiece.trim()) {
-        const cleanPiece = expandedPiece.replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
+        const cleanPiece = cleanNovelContent(expandedPiece);
         const newWordCount = countPureWords(cleanPiece);
         if (newWordCount > currentWords) {
           fullContent = cleanPiece;
@@ -2054,6 +2146,7 @@ ${fullContent}
       }
     }
 
+    fullContent = cleanNovelContent(fullContent);
     fullContent = trimTextToWordRange(fullContent, minW, maxW);
     res.json({ success: true, content: fullContent });
   } catch (error: any) {

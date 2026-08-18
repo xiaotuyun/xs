@@ -391,7 +391,6 @@ export function sanitizeWholeNovel(novel: Novel): Novel {
       name: cleanJsonArtifacts(char.name),
       role: cleanJsonArtifacts(char.role),
       description: cleanJsonArtifacts(char.description),
-      personality: cleanJsonArtifacts(char.personality),
       background: cleanJsonArtifacts(char.background),
     })),
     volumes: normalizeNovelChaptersAndTitles(novel.volumes || []),
