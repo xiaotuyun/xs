@@ -25,3 +25,17 @@ input, textarea, p, span, div, h1, h2, h3, h4, h5, h6, article, section {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* 防止移动端/iOS 在聚焦字号小于 16px 的输入框时触发系统自动放大页面 */
+@media screen and (max-width: 1024px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* 优化触控体验，防止双击误放大 */
+button, a, input, textarea, select {
+  touch-action: manipulation;
+}
