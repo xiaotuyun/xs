@@ -1156,6 +1156,119 @@ app.post("/api/ai/test-model", async (req, res) => {
   }
 });
 
+function cleanJsonArtifacts(str: any): string {
+  if (str === null || str === undefined) return '';
+  if (typeof str === 'object') {
+    if (str.title) return cleanJsonArtifacts(str.title);
+    if (str.volumeTitle) return cleanJsonArtifacts(str.volumeTitle);
+    if (str.volTitle) return cleanJsonArtifacts(str.volTitle);
+    if (str.summary) return cleanJsonArtifacts(str.summary);
+    if (str.name) return cleanJsonArtifacts(str.name);
+    if (str.text) return cleanJsonArtifacts(str.text);
+    return '';
+  }
+
+  let text = String(str).trim();
+
+  // If text starts with full JSON object/array, try to parse and extract meaningful text
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'object') {
+        const extracted = cleanJsonArtifacts(parsed);
+        if (extracted) return extracted;
+      }
+    } catch {}
+  }
+
+  // Remove markdown code fences and bold indicators
+  text = text.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+  text = text.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
+
+  // Strip leading JSON key prefixes: e.g. "volumeTitle": "...", "title": "...", "summary": "..."
+  const jsonKeyPrefix = /^[\{\[\s]*"?(?:volumeTitle|volTitle|chapterTitle|title|summary|logline|chapters|chapterNumber|name|description|background|powerSystem|factions)"?\s*[:：]\s*"?/i;
+  while (jsonKeyPrefix.test(text)) {
+    text = text.replace(jsonKeyPrefix, '').trim();
+  }
+
+  // Strip trailing JSON artifacts like: ", "chapters": [...", ", \n", etc.
+  text = text.replace(/",?\s*(?:"chapters"|"summary"|"volumeTitle"|"volTitle"|"title"|"logline"|"chapterNumber")\s*[:：]\s*\[?.*$/is, '');
+  text = text.replace(/[,\s"'\`\}\]]+$/g, '').trim();
+  text = text.replace(/^[,\s"'\`\{\[]+/g, '').trim();
+
+  // Strip leftover JSON key remnants in the middle (e.g. `第1章 title": "废土维修工`)
+  text = text.replace(/(?:volumeTitle|volTitle|chapterTitle|title|summary|chapters|chapterNumber)\s*["']?\s*[:：]\s*["']?/gi, ' ').trim();
+
+  // Clean unescaped quotes at borders
+  text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+
+  return text;
+}
+
+function cleanVolumeTitle(volTitle: any, volNumber: number): string {
+  let cleaned = cleanJsonArtifacts(volTitle);
+  if (!cleaned) return `第${volNumber}卷 精彩剧情篇`;
+
+  const volPrefixRegex = /^第\s*([0-9零一二三四五六七八九十百千万]+)\s*[卷篇][\s：:\-—]*/i;
+  cleaned = cleaned.replace(volPrefixRegex, '').trim();
+  if (!cleaned) cleaned = `精彩剧情篇`;
+
+  return `第${volNumber}卷 ${cleaned}`;
+}
+
+function cleanSummary(summary: any, fallback = ''): string {
+  let cleaned = cleanJsonArtifacts(summary);
+  if (!cleaned) return fallback || '本章节推进主线剧情发展，承上启下，充满看点。';
+  return cleaned;
+}
+
+function cleanChapterTitle(title: any, chapIndex: number, defaultTheme = ''): string {
+  let cleaned = cleanJsonArtifacts(title);
+  const prefixRegex = /^第\s*([零一二三四五六七八九十百千万0-9]+)\s*章[\s：:\-—]*|^(?:Chapter|\b)\s*(\d+)\s*(?:章|\b)[\s：:\-—]*/i;
+  if (prefixRegex.test(cleaned)) {
+    const withoutPrefix = cleaned.replace(prefixRegex, '').trim();
+    return `第${chapIndex}章 ${withoutPrefix || defaultTheme || '章节内容'}`.trim();
+  }
+  return `第${chapIndex}章 ${cleaned || defaultTheme || '章节内容'}`.trim();
+}
+
+function safeParseAiJson(rawText: string): any {
+  if (!rawText) return {};
+
+  let text = String(rawText).trim();
+
+  // Strip DeepSeek / Qwen <think> ... </think> reasoning blocks
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Strip markdown fences
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // Extract from outer braces { ... } or [ ... ]
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const jsonCandidate = text.substring(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch {
+      // Try fixing trailing commas before } or ]
+      const fixedJson = jsonCandidate
+        .replace(/,\s*([\}\]])/g, '$1')
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'");
+      try {
+        return JSON.parse(fixedJson);
+      } catch {}
+    }
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  return {};
+}
+
 function enforceVolumeAndChapterCounts(
   rawVolumes: any[],
   targetVolCount: number,
@@ -1194,10 +1307,10 @@ function enforceVolumeAndChapterCounts(
   for (let v = 0; v < targetVolCount; v++) {
     const currentVolNum = startVolNum + v;
     const rawVol = existingVols[v];
-    const volTitle = rawVol && rawVol.volumeTitle ? String(rawVol.volumeTitle).trim() : `第${currentVolNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
-    const volSummary = rawVol && rawVol.summary ? String(rawVol.summary).trim() : `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`;
+    const volTitle = rawVol ? cleanVolumeTitle(rawVol.volumeTitle || rawVol.title, currentVolNum) : `第${currentVolNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
+    const volSummary = rawVol ? cleanSummary(rawVol.summary, `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`) : `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`;
 
-    const rawChapters = rawVol && Array.isArray(rawVol.chapters) ? rawVol.chapters : [];
+    const rawChapters = rawVol && Array.isArray(rawVol.chapters) ? rawVol.chapters : (rawVol && Array.isArray(rawVol.newChapters) ? rawVol.newChapters : []);
     const formattedChapters: any[] = [];
 
     for (let c = 0; c < targetChapCount; c++) {
@@ -1205,12 +1318,8 @@ function enforceVolumeAndChapterCounts(
       const rawChap = rawChapters[c];
 
       if (rawChap) {
-        let chapTitle = rawChap.title ? String(rawChap.title).trim() : "";
-        const cleanTitle = chapTitle.replace(/^第\s*[0-9一二三四五六七八九十百千万]+\s*章[\s：:\-—]*/i, '').replace(/^Chapter\s*\d+[\s：:\-—]*/i, '').trim();
-        chapTitle = `第${chapIndex}章 ${cleanTitle || defaultChapThemes[c % defaultChapThemes.length]}`;
-        const chapSummary = rawChap.summary && String(rawChap.summary).trim()
-          ? String(rawChap.summary).trim()
-          : `本章紧承前文剧情，主角在当前局势中展开行动，推进核心冲突与伏笔。`;
+        const chapTitle = cleanChapterTitle(rawChap.title, chapIndex, defaultChapThemes[c % defaultChapThemes.length]);
+        const chapSummary = cleanSummary(rawChap.summary, `本章紧承前文剧情，主角在当前局势中展开行动，推进核心冲突与伏笔。`);
 
         formattedChapters.push({
           chapterNumber: chapIndex,
@@ -1345,21 +1454,25 @@ JSON 数据格式必须精准符合以下 JSON 规范：
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     const text = await generateContent(activeKey, activeModel, contents, 0.7, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
     
-    let resultJson: any = {};
-    try {
-      let cleanText = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
-      const firstBrace = cleanText.indexOf('{');
-      const lastBrace = cleanText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanText = cleanText.substring(firstBrace, lastBrace + 1);
-      }
-      resultJson = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.warn("JSON parse warning:", parseErr);
-      resultJson = JSON.parse(text || "{}");
-    }
+    let resultJson = safeParseAiJson(text);
 
     if (resultJson) {
+      if (resultJson.title) resultJson.title = cleanJsonArtifacts(resultJson.title);
+      if (resultJson.logline) resultJson.logline = cleanJsonArtifacts(resultJson.logline);
+      if (resultJson.worldBuilding) {
+        resultJson.worldBuilding.background = cleanJsonArtifacts(resultJson.worldBuilding.background);
+        resultJson.worldBuilding.powerSystem = cleanJsonArtifacts(resultJson.worldBuilding.powerSystem);
+        resultJson.worldBuilding.factions = cleanJsonArtifacts(resultJson.worldBuilding.factions);
+      }
+      if (Array.isArray(resultJson.characters)) {
+        resultJson.characters = resultJson.characters.map((c: any) => ({
+          name: cleanJsonArtifacts(c.name),
+          role: cleanJsonArtifacts(c.role),
+          description: cleanJsonArtifacts(c.description),
+          background: cleanJsonArtifacts(c.background),
+        }));
+      }
+
       const rawVols = resultJson.volumes || resultJson.newVolumes || [];
       resultJson.volumes = enforceVolumeAndChapterCounts(
         rawVols,
@@ -1499,14 +1612,7 @@ JSON 数据格式必须为：
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     const text = await generateContent(activeKey, activeModel, contents, 0.7, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
 
-    let resultJson: any = {};
-    try {
-      const cleanText = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
-      resultJson = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.warn("JSON parse warning:", parseErr);
-      resultJson = JSON.parse(text || "{}");
-    }
+    let resultJson = safeParseAiJson(text);
 
     if (resultJson) {
       const rawVols = resultJson.newVolumes || resultJson.volumes || [];
@@ -1610,19 +1716,7 @@ JSON 输出格式样例：
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     const text = await generateContent(activeKey, activeModel, contents, 0.7, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
 
-    let resultJson: any = {};
-    try {
-      let cleanText = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
-      const firstBrace = cleanText.indexOf('{');
-      const lastBrace = cleanText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanText = cleanText.substring(firstBrace, lastBrace + 1);
-      }
-      resultJson = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.warn("JSON parse warning:", parseErr);
-      resultJson = JSON.parse(text || "{}");
-    }
+    let resultJson = safeParseAiJson(text);
 
     if (resultJson) {
       const mockVolArray = [{

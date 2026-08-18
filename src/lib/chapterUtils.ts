@@ -1,4 +1,86 @@
-import { Chapter, Volume } from '../types';
+import { Chapter, Volume, Novel } from '../types';
+
+/**
+ * Strips raw JSON keys, braces, unescaped quotes, trailing comma artifacts,
+ * and conversational prefixes/suffixes from string values.
+ * Handles cases like:
+ * - `"volumeTitle": "第1卷 废土垃圾场里走出的凿拳人",`
+ * - `第2章 title": "第1章 废土垃圾场里捡来的半截桩功",`
+ * - `"summary": "交代废土背景与陈牧在底层垃圾场的艰难求生...", "chapters": [{"chapterNumber": 1,`
+ * - `{"title": "核爆废土: 我以气血横推星空", "logline": ...}`
+ */
+export function cleanJsonArtifacts(str: any): string {
+  if (str === null || str === undefined) return '';
+  if (typeof str === 'object') {
+    if (str.title) return cleanJsonArtifacts(str.title);
+    if (str.volumeTitle) return cleanJsonArtifacts(str.volumeTitle);
+    if (str.volTitle) return cleanJsonArtifacts(str.volTitle);
+    if (str.summary) return cleanJsonArtifacts(str.summary);
+    if (str.name) return cleanJsonArtifacts(str.name);
+    if (str.text) return cleanJsonArtifacts(str.text);
+    return '';
+  }
+
+  let text = String(str).trim();
+
+  // If text starts with full JSON object/array, try to parse and extract meaningful text
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'object') {
+        const extracted = cleanJsonArtifacts(parsed);
+        if (extracted) return extracted;
+      }
+    } catch {}
+  }
+
+  // Remove markdown code fences and bold indicators
+  text = text.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+  text = text.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
+
+  // Strip leading JSON key prefixes: e.g. "volumeTitle": "...", "title": "...", "summary": "..."
+  const jsonKeyPrefix = /^[\{\[\s]*"?(?:volumeTitle|volTitle|chapterTitle|title|summary|logline|chapters|chapterNumber|name|description|background|powerSystem|factions)"?\s*[:：]\s*"?/i;
+  while (jsonKeyPrefix.test(text)) {
+    text = text.replace(jsonKeyPrefix, '').trim();
+  }
+
+  // Strip trailing JSON artifacts like: ", "chapters": [...", ", \n", etc.
+  text = text.replace(/",?\s*(?:"chapters"|"summary"|"volumeTitle"|"volTitle"|"title"|"logline"|"chapterNumber")\s*[:：]\s*\[?.*$/is, '');
+  text = text.replace(/[,\s"'\`\}\]]+$/g, '').trim();
+  text = text.replace(/^[,\s"'\`\{\[]+/g, '').trim();
+
+  // Strip leftover JSON key remnants in the middle (e.g. `第1章 title": "废土维修工`)
+  text = text.replace(/(?:volumeTitle|volTitle|chapterTitle|title|summary|chapters|chapterNumber)\s*["']?\s*[:：]\s*["']?/gi, ' ').trim();
+
+  // Clean unescaped quotes at borders
+  text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+
+  return text;
+}
+
+/**
+ * Cleans a volume title and ensures proper "第X卷 ..." format.
+ */
+export function cleanVolumeTitle(volTitle: any, volNumber: number): string {
+  let cleaned = cleanJsonArtifacts(volTitle);
+  if (!cleaned) return `第${volNumber}卷 精彩剧情篇`;
+
+  // Strip repeated "第X卷" prefix if it exists to normalize
+  const volPrefixRegex = /^第\s*([0-9零一二三四五六七八九十百千万]+)\s*[卷篇][\s：:\-—]*/i;
+  cleaned = cleaned.replace(volPrefixRegex, '').trim();
+  if (!cleaned) cleaned = `精彩剧情篇`;
+
+  return `第${volNumber}卷 ${cleaned}`;
+}
+
+/**
+ * Cleans a summary string, removing JSON syntax or raw code dumps.
+ */
+export function cleanSummary(summary: any, fallback = ''): string {
+  let cleaned = cleanJsonArtifacts(summary);
+  if (!cleaned) return fallback || '本章节推进主线剧情发展，承上启下，充满看点。';
+  return cleaned;
+}
 
 /**
  * Parses a chapter number from a title string.
@@ -8,10 +90,7 @@ import { Chapter, Volume } from '../types';
 export function parseChapterNumberFromTitle(title: string): number | null {
   if (!title) return null;
 
-  let cleanTitle = title.trim();
-  // Clean markdown bold syntax, quotes, and brackets from start and end
-  cleanTitle = cleanTitle.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
-  cleanTitle = cleanTitle.replace(/^[\s"'`【#]*|[\s"'`】]*$/g, '').trim();
+  let cleanTitle = cleanJsonArtifacts(title);
 
   // 1. Arabic numerals match: "第9章", "第 10 章", "4章", "Chapter 12"
   const arabicMatch = cleanTitle.match(/(?:第|Chapter|\b)\s*(\d+)\s*(?:章|\b)/i);
@@ -77,20 +156,18 @@ function chineseToNumber(str: string): number | null {
 export function replaceChapterTitleNumber(title: string, newNumber: number): string {
   if (!title) return `第${newNumber}章`;
 
-  let trimmed = title.trim();
-  // Clean markdown bold syntax, quotes, and brackets from start and end
-  trimmed = trimmed.replace(/^\s*\*\*+\s*/g, '').replace(/\s*\*\*+\s*$/g, '');
-  trimmed = trimmed.replace(/^[\s"'`【#]*|[\s"'`】]*$/g, '').trim();
+  let trimmed = cleanJsonArtifacts(title);
 
   // Pattern 1: Starts with "第 [0-9一二三四五六七八九十百千]+ 章"
   const prefixRegex = /^第\s*([零一二三四五六七八九十百千万0-9]+)\s*章[\s：:\-—]*|^(?:Chapter|\b)\s*(\d+)\s*(?:章|\b)[\s：:\-—]*/i;
 
   if (prefixRegex.test(trimmed)) {
-    return trimmed.replace(prefixRegex, `第${newNumber}章 `).replace(/\s+/g, ' ');
+    const withoutPrefix = trimmed.replace(prefixRegex, '').trim();
+    return `第${newNumber}章 ${withoutPrefix || '章节内容'}`.trim();
   }
 
-  // If no "第X章" prefix, check if it starts with "第X章" without space or colon
-  return `第${newNumber}章 ${trimmed}`;
+  // If no "第X章" prefix
+  return `第${newNumber}章 ${trimmed}`.trim();
 }
 
 /**
@@ -144,7 +221,7 @@ export function enforceExactChaptersForVolume(
     if (rawChap) {
       const rawTitle = rawChap.title ? String(rawChap.title).trim() : "";
       const normalizedTitle = rawTitle ? replaceChapterTitleNumber(rawTitle, chapIndex) : `第${chapIndex}章 ${defaultTitleThemes[c % defaultTitleThemes.length]}`;
-      const normalizedSummary = rawChap.summary ? String(rawChap.summary).trim() : `本章剧情紧承前文，主角在当前局势中展开行动，推进核心冲突与伏笔。`;
+      const normalizedSummary = cleanSummary(rawChap.summary, `本章剧情紧承前文，主角在当前局势中展开行动，推进核心冲突与伏笔。`);
 
       chapters.push({
         id: rawChap.id || `chap-${Date.now()}-${volNumber}-${c}`,
@@ -211,8 +288,8 @@ export function enforceExactVolumesAndChapters(
     let volSummary = "";
 
     if (rawVol) {
-      volTitle = rawVol.volumeTitle ? String(rawVol.volumeTitle).trim() : `第${volNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
-      volSummary = rawVol.summary ? String(rawVol.summary).trim() : `本卷围绕核心冲突展开，剧情层层递进，将全书主线推向阶段性高潮。`;
+      volTitle = cleanVolumeTitle(rawVol.volumeTitle || rawVol.title, volNum);
+      volSummary = cleanSummary(rawVol.summary, `本卷围绕核心冲突展开，剧情层层递进，将全书主线推向阶段性高潮。`);
     } else {
       volTitle = `第${volNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
       volSummary = `本卷围绕核心冲突展开，主角实力与眼界进一步拓展，迎来更为宏大的交锋与挑战。`;
@@ -259,6 +336,7 @@ export function enforceExactVolumesAndChapters(
  * 1. Chapters are globally indexed 1, 2, 3... N across all volumes in order.
  * 2. `chapterNumber` is updated to equal global index.
  * 3. Chapter title prefix "第X章" is updated to match global index ("第12章 ...").
+ * 4. Volume titles and summaries are cleansed of any leftover JSON keys or artifacts.
  */
 export function normalizeNovelChaptersAndTitles(volumes: Volume[]): Volume[] {
   let globalChapIndex = 1;
@@ -266,24 +344,58 @@ export function normalizeNovelChaptersAndTitles(volumes: Volume[]): Volume[] {
   return volumes.map((vol, vIdx) => {
     // Sort chapters in this volume first by effective chapter number
     const sortedChapters = sortChapters(vol.chapters);
+    const volNum = vIdx + 1;
+    const cleanVolTitle = cleanVolumeTitle(vol.volumeTitle, volNum);
+    const cleanVolSummary = cleanSummary(vol.summary, `本卷围绕核心冲突展开，将全书剧情推向阶段性高潮。`);
 
     const reindexedChapters = sortedChapters.map((chap) => {
       const targetIndex = globalChapIndex++;
       const newTitle = replaceChapterTitleNumber(chap.title, targetIndex);
+      const newSummary = cleanSummary(chap.summary, `本章剧情承上启下，推进核心冲突与看点。`);
 
       return {
         ...chap,
         chapterNumber: targetIndex,
         title: newTitle,
+        summary: newSummary,
       };
     });
 
     return {
       ...vol,
-      volumeNumber: vIdx + 1,
+      volumeNumber: volNum,
+      volumeTitle: cleanVolTitle,
+      summary: cleanVolSummary,
       chapters: reindexedChapters,
     };
   });
+}
+
+/**
+ * Cleans the whole novel structure (title, logline, worldBuilding, characters, volumes, chapters)
+ * from any rogue JSON formatting artifacts or English keys.
+ */
+export function sanitizeWholeNovel(novel: Novel): Novel {
+  return {
+    ...novel,
+    title: cleanJsonArtifacts(novel.title) || '未命名小说',
+    logline: cleanJsonArtifacts(novel.logline) || '',
+    worldBuilding: {
+      ...novel.worldBuilding,
+      background: cleanJsonArtifacts(novel.worldBuilding?.background) || '',
+      powerSystem: cleanJsonArtifacts(novel.worldBuilding?.powerSystem) || '',
+      factions: cleanJsonArtifacts(novel.worldBuilding?.factions) || '',
+    },
+    characters: (novel.characters || []).map(char => ({
+      ...char,
+      name: cleanJsonArtifacts(char.name),
+      role: cleanJsonArtifacts(char.role),
+      description: cleanJsonArtifacts(char.description),
+      personality: cleanJsonArtifacts(char.personality),
+      background: cleanJsonArtifacts(char.background),
+    })),
+    volumes: normalizeNovelChaptersAndTitles(novel.volumes || []),
+  };
 }
 
 
