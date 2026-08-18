@@ -186,6 +186,108 @@ export function sortChapters<T extends Chapter>(chapters: T[]): T[] {
   return [...chapters].sort((a, b) => getEffectiveChapterNumber(a) - getEffectiveChapterNumber(b));
 }
 
+export function generateContextualFallbackChapterData(
+  chapIndex: number,
+  chapOffsetInVol: number,
+  totalChapsInVol: number,
+  volNumber: number,
+  volTitle = ""
+): { title: string; summary: string } {
+  const cleanVol = (volTitle || "").replace(/^第\s*\d+\s*卷\s*[:：\s]*/i, '').trim() || `第${volNumber}卷`;
+  const ratio = totalChapsInVol > 1 ? chapOffsetInVol / (totalChapsInVol - 1) : 0.5;
+
+  let titleList: string[] = [];
+  let summaryList: string[] = [];
+
+  if (chapOffsetInVol === 0) {
+    titleList = [
+      `${cleanVol}之始，风云乍现`,
+      `踏入新境，局势初定`,
+      `新局拉开，序幕降临`,
+      `暗潮微涌，首探虚实`
+    ];
+    summaryList = [
+      `本章作为本卷开端，主角正式迈入【${cleanVol}】的核心舞台，初步摸清周遭险恶环境与敌友阵营，核心冲突主线全面展开。`,
+      `本卷宏大序幕拉开，主角面对全新的局势与挑战迅速占据立足之地，敏锐察觉潜藏在暗处的危机与线索。`
+    ];
+  } else if (chapOffsetInVol === totalChapsInVol - 1) {
+    titleList = [
+      `乾坤底定，名动八荒`,
+      `余波未平，更远征途`,
+      `尘埃落定，底蕴蜕变`,
+      `终局收官，威震一方`
+    ];
+    summaryList = [
+      `本章为本卷高潮决战后的收官之章，主角彻底扫清【${cleanVol}】的残余大敌，清点巨额战果并实现境界底蕴的跨越，同时引出后续宏大伏笔。`,
+      `巅峰决战落幕，主角威名传遍四方，阶段性因果彻底了结，局势迎来新的平衡，为迈向下一卷更辽阔的天地铺平道路。`
+    ];
+  } else if (ratio < 0.25) {
+    titleList = [
+      `初试锋芒，震慑宵小`,
+      `线索初显，暗流激荡`,
+      `立威树敌，局势升温`,
+      `深入险地，机缘初露`,
+      `意外变数与深入调查`,
+      `小试身手，掌控主动`
+    ];
+    summaryList = [
+      `主角在【${cleanVol}】中展开深入探索，遭遇首次冲突考验，凭借过人胆识与敏锐洞察破除迷局，逐步逼近核心秘密。`,
+      `局势暗流涌动，各方势力产生摩擦，主角主动出击查明关键线索，在关键节点果断出手，初露峥嵘。`,
+      `主角深入关键区域获取重要情报与修炼机缘，意外撞破对手阴谋，冲突由此进一步升级。`
+    ];
+  } else if (ratio < 0.55) {
+    titleList = [
+      `步步为营与破局转机`,
+      `夺宝交锋，重重杀机`,
+      `暗度陈仓，实力精进`,
+      `强敌插手，局势剧变`,
+      `深入险境，绝密现世`,
+      `连环杀局与临机应变`,
+      `底蕴积累与境界突破`
+    ];
+    summaryList = [
+      `剧情走向深水区，主角面对多方势力的围追堵截与暗中算计，巧妙运用智谋与实力步步为营，成功逆转不利态势。`,
+      `围绕核心机缘与争端，各大势力正面交锋，主角在险恶环境中果断夺取关键造化，战力迎来阶段性飞跃。`,
+      `危机关头主角识破对手陷阱，借力打力反制强敌，核心线索浮出水面，决战阴影悄然笼罩。`,
+      `主角借助险地特殊环境苦修磨砺，融合全新神通底牌，战力实现质的突破，引发各方侧目。`
+    ];
+  } else if (ratio < 0.85) {
+    titleList = [
+      `强敌压境与生死博弈`,
+      `绝处逢生，底牌尽出`,
+      `决战爆发，天地变色`,
+      `锋芒毕露，力挽狂澜`,
+      `绝境逆伐，神威大展`,
+      `杀招尽显，斩破死局`
+    ];
+    summaryList = [
+      `本卷冲突迎来最高潮！最强敌手亲自出手压迫，生死存亡之际，主角底牌尽出正面迎敌，爆发惊天动地的大对决。`,
+      `决战局势瞬息万变，主角在极限危机中洞悉破局之法，施展巅峰手段强力压制对手，掀起全场震撼。`,
+      `正邪交锋进入白热化阶段，主角以雷霆手段打破僵局，将强敌逼入绝境，胜利天平彻底倾斜。`,
+      `面对强敌的终极杀阵与绝命反扑，主角以无上意志逆风翻盘，施展至强杀招重创对手首脑。`
+    ];
+  } else {
+    titleList = [
+      `决胜诛敌，乾坤底定`,
+      `横扫残敌，清点战利`,
+      `实力跃迁，威震四方`,
+      `新局初开，声名远扬`
+    ];
+    summaryList = [
+      `大战迎来最终裁决，主角强势诛灭核心大敌，彻底粉碎对手图谋，震慑全场观战的各大势力。`,
+      `高潮战事平息，主角收拢核心机缘与战利品，实力再次精进升华，受到各方由衷敬畏。`
+    ];
+  }
+
+  const chosenTitle = titleList[chapOffsetInVol % titleList.length];
+  const chosenSummary = summaryList[chapOffsetInVol % summaryList.length];
+
+  return {
+    title: `第${chapIndex}章 ${chosenTitle}`,
+    summary: chosenSummary,
+  };
+}
+
 /**
  * Enforces that a single volume contains exactly the specified number of chapters.
  * If AI returned fewer chapters, synthesizes and appends missing chapters with coherent plot titles.
@@ -201,27 +303,17 @@ export function enforceExactChaptersForVolume(
   const existing = Array.isArray(rawChapters) ? rawChapters : [];
   const chapters: Chapter[] = [];
 
-  const defaultTitleThemes = [
-    "风云初动与暗流微显",
-    "局势突变与针锋相对",
-    "步步为营与破局转机",
-    "锋芒毕露与力挽狂澜",
-    "绝处逢生与底牌尽出",
-    "强敌来袭与生死决战",
-    "尘埃落定与更远征途",
-    "造化机缘与实力跃迁",
-    "秘境探幽与重重杀机",
-    "终极对决与名动天下"
-  ];
-
   for (let c = 0; c < targetChapCount; c++) {
     const chapIndex = startChapNumber + c;
     const rawChap = existing[c];
+    const fallbackInfo = generateContextualFallbackChapterData(chapIndex, c, targetChapCount, volNumber, volTitle);
 
     if (rawChap) {
       const rawTitle = rawChap.title ? String(rawChap.title).trim() : "";
-      const normalizedTitle = rawTitle ? replaceChapterTitleNumber(rawTitle, chapIndex) : `第${chapIndex}章 ${defaultTitleThemes[c % defaultTitleThemes.length]}`;
-      const normalizedSummary = cleanSummary(rawChap.summary, `本章剧情紧承前文，主角在当前局势中展开行动，推进核心冲突与伏笔。`);
+      const normalizedTitle = rawTitle ? replaceChapterTitleNumber(rawTitle, chapIndex) : fallbackInfo.title;
+      const normalizedSummary = rawChap.summary && !rawChap.summary.includes("本章紧密承接上文剧情发展")
+        ? cleanSummary(rawChap.summary, fallbackInfo.summary)
+        : fallbackInfo.summary;
 
       chapters.push({
         id: rawChap.id || `chap-${Date.now()}-${volNumber}-${c}`,
@@ -233,14 +325,11 @@ export function enforceExactChaptersForVolume(
         status: rawChap.status || 'draft',
       });
     } else {
-      const fallbackTitle = `第${chapIndex}章 ${defaultTitleThemes[c % defaultTitleThemes.length]}`;
-      const fallbackSummary = `本章紧密承接上文剧情发展，主角深入探索核心线索，局势迎来关键突破与剧情转折。`;
-
       chapters.push({
         id: `chap-${Date.now()}-${volNumber}-${c}`,
         chapterNumber: chapIndex,
-        title: fallbackTitle,
-        summary: fallbackSummary,
+        title: fallbackInfo.title,
+        summary: fallbackInfo.summary,
         content: '',
         wordCount: 0,
         status: 'draft',

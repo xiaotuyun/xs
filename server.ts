@@ -717,10 +717,10 @@ app.all(["/api/auth/*", "/api/feedback/*", "/api/admin/*"], async (req, res, nex
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const data = await response.json();
-      res.status(response.status).json(data);
+      return res.status(response.status).json(data);
     } else {
       const text = await response.text();
-      res.status(response.status).send(text);
+      return res.status(response.status).send(text);
     }
   } catch (error) {
     console.error("Proxy error, falling back to local handlers:", error);
@@ -1335,6 +1335,109 @@ function safeParseAiJson(rawText: string): any {
   return {};
 }
 
+function generateContextualFallbackChapterData(
+  chapIndex: number,
+  chapOffsetInVol: number,
+  totalChapsInVol: number,
+  volNumber: number,
+  volTitle: string,
+  volSummary: string
+): { title: string; summary: string } {
+  const cleanVol = (volTitle || "").replace(/^第\s*\d+\s*卷\s*[:：\s]*/i, '').trim() || `第${volNumber}卷`;
+  const ratio = totalChapsInVol > 1 ? chapOffsetInVol / (totalChapsInVol - 1) : 0.5;
+
+  let titleList: string[] = [];
+  let summaryList: string[] = [];
+
+  if (chapOffsetInVol === 0) {
+    titleList = [
+      `${cleanVol}之始，风云乍现`,
+      `踏入新境，局势初定`,
+      `新局拉开，序幕降临`,
+      `暗潮微涌，首探虚实`
+    ];
+    summaryList = [
+      `本章作为本卷开端，主角正式迈入【${cleanVol}】的核心舞台，初步摸清周遭险恶环境与敌友阵营，核心冲突主线全面展开。`,
+      `本卷宏大序幕拉开，主角面对全新的局势与挑战迅速占据立足之地，敏锐察觉潜藏在暗处的危机与线索。`
+    ];
+  } else if (chapOffsetInVol === totalChapsInVol - 1) {
+    titleList = [
+      `乾坤底定，名动八荒`,
+      `余波未平，更远征途`,
+      `尘埃落定，底蕴蜕变`,
+      `终局收官，威震一方`
+    ];
+    summaryList = [
+      `本章为本卷高潮决战后的收官之章，主角彻底扫清【${cleanVol}】的残余大敌，清点巨额战果并实现境界底蕴的跨越，同时引出后续宏大伏笔。`,
+      `巅峰决战落幕，主角威名传遍四方，阶段性因果彻底了结，局势迎来新的平衡，为迈向下一卷更辽阔的天地铺平道路。`
+    ];
+  } else if (ratio < 0.25) {
+    titleList = [
+      `初试锋芒，震慑宵小`,
+      `线索初显，暗流激荡`,
+      `立威树敌，局势升温`,
+      `深入险地，机缘初露`,
+      `意外变数与深入调查`,
+      `小试身手，掌控主动`
+    ];
+    summaryList = [
+      `主角在【${cleanVol}】中展开深入探索，遭遇首次冲突考验，凭借过人胆识与敏锐洞察破除迷局，逐步逼近核心秘密。`,
+      `局势暗流涌动，各方势力产生摩擦，主角主动出击查明关键线索，在关键节点果断出手，初露峥嵘。`,
+      `主角深入关键区域获取重要情报与修炼机缘，意外撞破对手阴谋，冲突由此进一步升级。`
+    ];
+  } else if (ratio < 0.55) {
+    titleList = [
+      `步步为营与破局转机`,
+      `夺宝交锋，重重杀机`,
+      `暗度陈仓，实力精进`,
+      `强敌插手，局势剧变`,
+      `深入险境，绝密现世`,
+      `连环杀局与临机应变`,
+      `底蕴积累与境界突破`
+    ];
+    summaryList = [
+      `剧情走向深水区，主角面对多方势力的围追堵截与暗中算计，巧妙运用智谋与实力步步为营，成功逆转不利态势。`,
+      `围绕核心机缘与争端，各大势力正面交锋，主角在险恶环境中果断夺取关键造化，战力迎来阶段性飞跃。`,
+      `危机关头主角识破对手陷阱，借力打力反制强敌，核心线索浮出水面，决战阴影悄然笼罩。`,
+      `主角借助险地特殊环境苦修磨砺，融合全新神通底牌，战力实现质的突破，引发各方侧目。`
+    ];
+  } else if (ratio < 0.85) {
+    titleList = [
+      `强敌压境与生死博弈`,
+      `绝处逢生，底牌尽出`,
+      `决战爆发，天地变色`,
+      `锋芒毕露，力挽狂澜`,
+      `绝境逆伐，神威大展`,
+      `杀招尽显，斩破死局`
+    ];
+    summaryList = [
+      `本卷冲突迎来最高潮！最强敌手亲自出手压迫，生死存亡之际，主角底牌尽出正面迎敌，爆发惊天动地的大对决。`,
+      `决战局势瞬息万变，主角在极限危机中洞悉破局之法，施展巅峰手段强力压制对手，掀起全场震撼。`,
+      `正邪交锋进入白热化阶段，主角以雷霆手段打破僵局，将强敌逼入绝境，胜利天平彻底倾斜。`,
+      `面对强敌的终极杀阵与绝命反扑，主角以无上意志逆风翻盘，施展至强杀招重创对手首脑。`
+    ];
+  } else {
+    titleList = [
+      `决胜诛敌，乾坤底定`,
+      `横扫残敌，清点战利`,
+      `实力跃迁，威震四方`,
+      `新局初开，声名远扬`
+    ];
+    summaryList = [
+      `大战迎来最终裁决，主角强势诛灭核心大敌，彻底粉碎对手图谋，震慑全场观战的各大势力。`,
+      `高潮战事平息，主角收拢核心机缘与战利品，实力再次精进升华，受到各方由衷敬畏。`
+    ];
+  }
+
+  const chosenTitle = titleList[chapOffsetInVol % titleList.length];
+  const chosenSummary = summaryList[chapOffsetInVol % summaryList.length];
+
+  return {
+    title: `第${chapIndex}章 ${chosenTitle}`,
+    summary: chosenSummary,
+  };
+}
+
 function enforceVolumeAndChapterCounts(
   rawVolumes: any[],
   targetVolCount: number,
@@ -1354,27 +1457,16 @@ function enforceVolumeAndChapterCounts(
     "寰宇纵横篇",
     "大道归一篇",
     "万界主宰篇",
-    "神话终局篇"
-  ];
-
-  const defaultChapThemes = [
-    "风云初动与暗流微显",
-    "局势突变与针锋相对",
-    "步步为营与破局转机",
-    "锋芒毕露与力挽狂澜",
-    "绝处逢生与底牌尽出",
-    "强敌来袭与生死决战",
-    "尘埃落定与更远征途",
-    "造化机缘与实力跃迁",
-    "秘境探幽与重重杀机",
-    "终极对决与名动天下"
+    "神话终局篇",
+    "星海遨游篇",
+    "九天封神篇"
   ];
 
   for (let v = 0; v < targetVolCount; v++) {
     const currentVolNum = startVolNum + v;
     const rawVol = existingVols[v];
     const volTitle = rawVol ? cleanVolumeTitle(rawVol.volumeTitle || rawVol.title, currentVolNum) : `第${currentVolNum}卷 ${defaultVolThemes[v % defaultVolThemes.length]}`;
-    const volSummary = rawVol ? cleanSummary(rawVol.summary, `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`) : `本卷围绕核心冲突展开，剧情层层推进，逐步推向阶段性高潮。`;
+    const volSummary = rawVol ? cleanSummary(rawVol.summary, `本卷围绕核心冲突与主角成长展开，剧情层层推进，逐步推向阶段性高潮。`) : `本卷围绕核心冲突与主角成长展开，剧情层层推进，逐步推向阶段性高潮。`;
 
     const rawChapters = rawVol && Array.isArray(rawVol.chapters) ? rawVol.chapters : (rawVol && Array.isArray(rawVol.newChapters) ? rawVol.newChapters : []);
     const formattedChapters: any[] = [];
@@ -1383,9 +1475,22 @@ function enforceVolumeAndChapterCounts(
       const chapIndex = globalChapIndex++;
       const rawChap = rawChapters[c];
 
-      if (rawChap) {
-        const chapTitle = cleanChapterTitle(rawChap.title, chapIndex, defaultChapThemes[c % defaultChapThemes.length]);
-        const chapSummary = cleanSummary(rawChap.summary, `本章紧承前文剧情，主角在当前局势中展开行动，推进核心冲突与伏笔。`);
+      if (rawChap && rawChap.title && rawChap.title.trim() && rawChap.summary && rawChap.summary.trim() && !rawChap.summary.includes("本章紧密承接上文剧情发展，主角深入探索核心线索")) {
+        const fallbackInfo = generateContextualFallbackChapterData(chapIndex, c, targetChapCount, currentVolNum, volTitle, volSummary);
+        const chapTitle = cleanChapterTitle(rawChap.title, chapIndex, fallbackInfo.title.replace(/^第\d+章\s*/, ''));
+        const chapSummary = cleanSummary(rawChap.summary, fallbackInfo.summary);
+
+        formattedChapters.push({
+          chapterNumber: chapIndex,
+          title: chapTitle,
+          summary: chapSummary,
+        });
+      } else if (rawChap && rawChap.title && rawChap.title.trim()) {
+        const fallbackInfo = generateContextualFallbackChapterData(chapIndex, c, targetChapCount, currentVolNum, volTitle, volSummary);
+        const chapTitle = cleanChapterTitle(rawChap.title, chapIndex, fallbackInfo.title.replace(/^第\d+章\s*/, ''));
+        const chapSummary = rawChap.summary && !rawChap.summary.includes("本章紧密承接上文剧情发展")
+          ? cleanSummary(rawChap.summary, fallbackInfo.summary)
+          : fallbackInfo.summary;
 
         formattedChapters.push({
           chapterNumber: chapIndex,
@@ -1393,13 +1498,11 @@ function enforceVolumeAndChapterCounts(
           summary: chapSummary,
         });
       } else {
-        const fallbackTitle = `第${chapIndex}章 ${defaultChapThemes[c % defaultChapThemes.length]}`;
-        const fallbackSummary = `本章紧密承接上文剧情发展，主角深入探索核心线索，局势迎来关键突破与剧情转折。`;
-
+        const fallbackInfo = generateContextualFallbackChapterData(chapIndex, c, targetChapCount, currentVolNum, volTitle, volSummary);
         formattedChapters.push({
           chapterNumber: chapIndex,
-          title: fallbackTitle,
-          summary: fallbackSummary,
+          title: fallbackInfo.title,
+          summary: fallbackInfo.summary,
         });
       }
     }
@@ -1464,9 +1567,10 @@ app.post("/api/ai/generate-outline", async (req, res) => {
 3. 绝对不能擅自修改用户指定的力量体系境界名称。如果用户设定了具体境界，大纲和章节中提及实力时必须严格符合该体系。
 4. 如果用户未明确指定书名或角色，你可以根据创意推导；但只要用户有指定，必须优先完全匹配用户指定数据！
 
-【极其重要 - 严格数量约束】:
+【极其重要 - 严格数量约束与绝不重复】:
 - volumes (分卷): 必须生成刚好 【${parsedVolumeCount} 个分卷】，每一卷都要有分卷标题与剧情概要。
-- chapters (章节): 每个分卷内必须生成刚好 【${parsedChapterCount} 个具体的章节】（包含详细的章节序号、标题和章节剧情概要）。
+- chapters (章节): 每个分卷内必须完整生成全部 【${parsedChapterCount} 个具体章节】（严禁偷懒截断或只生成前几章），每一章必须包含具体序号、生动标题和详细具体的剧情概要。
+- **【严禁重复概要与套话】**：每个章节的剧情概要必须根据该分卷的起承转合逐步深入展开（入局探索 → 矛盾升级 → 高潮对决 → 战后收官），严禁使用任何重复的套话！每一章必须拥有独一无二的具体情节、冲突与看点。
 - **【全书章节全局递增连贯编号规范】**：全书所有分卷中的章节必须保持全局统一连贯递增编号（例如：第一卷包含第1~${parsedChapterCount}章，第二卷必须接续为第${parsedChapterCount + 1}~${parsedChapterCount * 2}章），严禁各个分卷单独重置为第1章或“第一章”！
 - **【章节标题格式规范】**：所有章节标题统一格式为 \`第X章 标题\`（如：\`第1章 穿越异界\`、\`第${parsedChapterCount + 1}章 强敌来袭\`），严禁使用“第一章”等中文大写或单独重置！
 
@@ -1655,11 +1759,12 @@ ${historyText}
 1. 必须在剧情逻辑、人物性格、世界观上**完美继承与续接**前面的所有章节与分卷发展，不得产生剧情脱节或人物设定前后矛盾。
 2. 必须生成刚好 【${parsedVolumeCount} 个新的分卷】。
 3. 卷号从【第 ${lastVolNum + 1} 卷】开始依次递增。
-4. **【全书章节连贯编号规范】**：全书章节必须保持全局统一连贯的递增编号！当前全书前面已有 ${totalExistingChapters} 章，续接的新章节必须从【第 ${nextChapStartNum} 章】开始依次递增！
-5. **【章节标题格式规范】**：章节标题必须统一格式为 \`第X章 标题\`（如：\`第${nextChapStartNum}章 遗迹终局\`），严禁重置为“第一章”或重新从第1章开始！
-6. 每个新分卷内必须生成刚好 【${parsedChapterCount} 个具体的续接章节】。
-7. 命名风格严格遵循：${titleStyle || "通俗白话风 (直白接地气)"}。
-8. 返回严格的 JSON 格式数据。
+4. **【严禁重复概要与套话】**：每个章节的剧情概要必须根据剧情起伏深入展开，严禁使用任何重复的套话！必须完整输出每个分卷内的全部 ${parsedChapterCount} 个章节，不得中途截断！
+5. **【全书章节连贯编号规范】**：全书章节必须保持全局统一连贯的递增编号！当前全书前面已有 ${totalExistingChapters} 章，续接的新章节必须从【第 ${nextChapStartNum} 章】开始依次递增！
+6. **【章节标题格式规范】**：章节标题必须统一格式为 \`第X章 标题\`（如：\`第${nextChapStartNum}章 遗迹终局\`），严禁重置为“第一章”或重新从第1章开始！
+7. 每个新分卷内必须生成刚好 【${parsedChapterCount} 个具体的续接章节】。
+8. 命名风格严格遵循：${titleStyle || "通俗白话风 (直白接地气)"}。
+9. 返回严格的 JSON 格式数据。
 
 JSON 数据格式必须为：
 {
@@ -1817,6 +1922,133 @@ JSON 输出格式样例：
   } catch (error: any) {
     console.error("Recast volume error:", error);
     res.status(400).json({ success: false, error: error.message || "重铸分卷大纲失败，请重试。" });
+  }
+});
+
+app.post("/api/ai/enrich-chapter-summaries", async (req, res) => {
+  try {
+    const config = getEffectiveAiConfig(req.body);
+    const {
+      volume,
+      novelContext,
+      instruction,
+    } = req.body;
+
+    if (!config.apiKey) {
+      return res.status(400).json({ success: false, error: "未配置 API Key，请先在右上角【设置】进行配置或在环境变量中指定。" });
+    }
+    if (!config.model) {
+      return res.status(400).json({ success: false, error: "未选择模型，请先在右上角【设置】选择一个模型。" });
+    }
+
+    const activeKey = config.apiKey;
+    const activeModel = config.model;
+    const customBaseUrl = config.customBaseUrl;
+    const useChatCompletions = config.useChatCompletions;
+
+    const volNumber = volume?.volumeNumber || 1;
+    const volTitle = volume?.volumeTitle || `第${volNumber}卷`;
+    const volSummary = volume?.summary || "本卷核心剧情";
+    const existingChapters = Array.isArray(volume?.chapters) ? volume.chapters : [];
+    const totalChapters = existingChapters.length || 5;
+
+    const startChapNum = existingChapters.length > 0
+      ? (existingChapters[0].chapterNumber || 1)
+      : 1;
+
+    let charContext = "";
+    if (Array.isArray(novelContext?.characters) && novelContext.characters.length > 0) {
+      charContext = novelContext.characters.map((c: any) => `【${c.name}】(${c.role}): ${c.description}`).join('\n  ');
+    }
+
+    const chapterListStr = existingChapters.map((ch: any, idx: number) => {
+      const cNum = ch.chapterNumber || (startChapNum + idx);
+      return `第${cNum}章 (原标题: ${ch.title || '待定'}, 当前概要: ${ch.summary || '无'})`;
+    }).join('\n');
+
+    const systemInstruction = `你是一位畅销网络小说白金作家与大纲总编剧。
+你的任务是为小说【第 ${volNumber} 卷: ${volTitle}】中的全部 【${totalChapters} 个章节】生成**情节高度连贯、跌宕起伏、绝不重复的详细章节剧情大纲与精美标题**。
+
+【最高语言指令 - 100%纯简体中文】:
+所有章节标题与剧情概要必须【100%全程使用地道优美的纯正简体中文撰写】，严禁输出任何英文！
+
+【小说信息】:
+- 书名: 《${novelContext?.title || "未命名小说"}》
+- 流派: ${novelContext?.genre || "奇幻/玄幻"}
+- 本卷标题: ${volTitle}
+- 本卷剧情概要: ${volSummary}
+${charContext ? `\n【核心角色】:\n  ${charContext}` : ''}
+
+【本卷全部待补全/精修的章节列表（共 ${totalChapters} 章）】:
+${chapterListStr}
+
+【核心生成原则与硬性要求】:
+1. **【严禁重复概要】**：本卷内每一章的剧情概要必须独一无二！按照“起（入局探索）- 承（危机升级与争端）- 转（决战爆发与绝境反击）- 合（终局裁决与战果清点）”的剧情节奏，步步推进。
+2. **【全局章节序号连贯规范】**：章节编号必须从【第 ${startChapNum} 章】精确递增到【第 ${startChapNum + totalChapters - 1} 章】。
+3. **【章节标题格式规范】**：所有章节标题统一格式为 \`第X章 标题\`。
+4. **【数量精确一致】**：必须刚好输出 【${totalChapters} 个章节】。
+5. 紧扣本卷核心看点《${volSummary}》，设计生动逼真、冲突激烈、看点满满的网文剧情。
+
+返回严格标准的 JSON 格式：
+{
+  "chapters": [
+    {
+      "chapterNumber": ${startChapNum},
+      "title": "第${startChapNum}章 精彩标题",
+      "summary": "详细生动的本章剧情概要与冲突看点（50-100字）"
+    }
+  ]
+}`;
+
+    const userPrompt = `用户特别精修指令: ${instruction || "为本卷所有章节生成情节连贯、跌宕起伏、绝不重复的详细剧情概要与生动标题，消除一切套话！"}`;
+
+    const contents = `${systemInstruction}\n\n${userPrompt}`;
+    const tokenCap = Math.min(8192, Math.max(3000, totalChapters * 180));
+    const text = await generateContent(activeKey, activeModel, contents, 0.7, customBaseUrl, useChatCompletions, tokenCap, config.selectedModels);
+
+    let resultJson = safeParseAiJson(text);
+    let enrichedChapters: any[] = [];
+
+    if (resultJson && Array.isArray(resultJson.chapters)) {
+      enrichedChapters = resultJson.chapters.map((ch: any, idx: number) => {
+        const cNum = startChapNum + idx;
+        const fallback = generateContextualFallbackChapterData(cNum, idx, totalChapters, volNumber, volTitle, volSummary);
+        const original = existingChapters[idx] || {};
+        return {
+          id: original.id || `chap-${Date.now()}-${volNumber}-${idx}`,
+          chapterNumber: cNum,
+          title: cleanChapterTitle(ch.title || original.title, cNum, fallback.title.replace(/^第\d+章\s*/, '')),
+          summary: cleanSummary(ch.summary, fallback.summary),
+          content: original.content || '',
+          wordCount: original.wordCount || 0,
+          status: original.status || 'draft',
+        };
+      });
+    }
+
+    // If AI failed or returned fewer chapters, procedural generator guarantees full completion
+    if (enrichedChapters.length < totalChapters) {
+      enrichedChapters = existingChapters.map((orig: any, idx: number) => {
+        const cNum = startChapNum + idx;
+        const existingAi = enrichedChapters[idx];
+        if (existingAi) return existingAi;
+        const fallback = generateContextualFallbackChapterData(cNum, idx, totalChapters, volNumber, volTitle, volSummary);
+        return {
+          id: orig.id || `chap-${Date.now()}-${volNumber}-${idx}`,
+          chapterNumber: cNum,
+          title: orig.title && !orig.title.includes("锋芒毕露与力挽狂澜") ? orig.title : fallback.title,
+          summary: fallback.summary,
+          content: orig.content || '',
+          wordCount: orig.wordCount || 0,
+          status: orig.status || 'draft',
+        };
+      });
+    }
+
+    res.json({ success: true, chapters: enrichedChapters });
+  } catch (error: any) {
+    console.error("Enrich chapter summaries error:", error);
+    res.status(400).json({ success: false, error: error.message || "AI 丰富章节大纲失败，请重试。" });
   }
 });
 
@@ -2549,7 +2781,7 @@ function getAuthCredentials() {
   if (fs.existsSync(filePath)) {
     try {
       const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data;
     } catch {}
   }
   return [];

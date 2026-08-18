@@ -72,6 +72,14 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
   const [isRecasting, setIsRecasting] = useState(false);
   const [recastError, setRecastError] = useState<string | null>(null);
 
+  // Enrich chapter summaries AI state
+  const [enrichingVolumeId, setEnrichingVolumeId] = useState<string | null>(null);
+  const [enrichModalVolume, setEnrichModalVolume] = useState<Volume | null>(null);
+  const [enrichPrompt, setEnrichPrompt] = useState('');
+  const [isEnrichingAll, setIsEnrichingAll] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [enrichSuccessMsg, setEnrichSuccessMsg] = useState<string | null>(null);
+
   // Manual Edit Volume state
   const [editingVolume, setEditingVolume] = useState<{ id: string; volumeTitle: string; summary: string } | null>(null);
 
@@ -634,6 +642,152 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
     }
   };
 
+  // AI Enrich Chapter Summaries (eliminate repetitive summaries & build rich progressive outlines)
+  const handleEnrichVolumeSubmit = async (vol: Volume, customInstruction?: string) => {
+    if (!onRequireConfig()) return;
+
+    setEnrichingVolumeId(vol.id);
+    setEnrichError(null);
+
+    try {
+      const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
+
+      const data = await callAiApi('/api/ai/enrich-chapter-summaries', {
+        volume: {
+          id: vol.id,
+          volumeNumber: vol.volumeNumber,
+          volumeTitle: vol.volumeTitle,
+          summary: vol.summary,
+          chapters: vol.chapters.map(c => ({
+            id: c.id,
+            chapterNumber: c.chapterNumber,
+            title: c.title,
+            summary: c.summary,
+            content: c.content,
+            wordCount: c.wordCount,
+            status: c.status
+          }))
+        },
+        novelContext: {
+          title: novel.title,
+          genre: novel.genre,
+          logline: novel.logline,
+          worldBuilding: novel.worldBuilding,
+          characters: novel.characters,
+          tone: novel.tone
+        },
+        instruction: customInstruction || enrichPrompt || '为本卷所有章节生成情节连贯、跌宕起伏、绝不重复的详细剧情概要与生动标题，消除一切套话！',
+        apiKey,
+        model,
+        customBaseUrl,
+        useChatCompletions
+      });
+
+      if (!data.success) {
+        throw new Error(data.error || 'AI 丰富章节大纲失败');
+      }
+
+      const returnedChapters: Chapter[] = data.chapters || [];
+      if (returnedChapters.length > 0) {
+        const updatedVolumes = novel.volumes.map(v => {
+          if (v.id === vol.id) {
+            return {
+              ...v,
+              chapters: returnedChapters
+            };
+          }
+          return v;
+        });
+
+        onUpdateNovel({
+          ...novel,
+          volumes: normalizeNovelChaptersAndTitles(updatedVolumes),
+          updatedAt: new Date().toISOString()
+        });
+
+        setEnrichModalVolume(null);
+        setEnrichPrompt('');
+        setEnrichSuccessMsg(`成功为【第 ${vol.volumeNumber} 卷】补全并丰富了 ${returnedChapters.length} 个章节的精彩剧情概要！`);
+        setTimeout(() => setEnrichSuccessMsg(null), 4000);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setEnrichError(err.message || 'AI 丰富章节大纲失败，请重试。');
+    } finally {
+      setEnrichingVolumeId(null);
+    }
+  };
+
+  const handleBatchEnrichAllVolumes = async () => {
+    if (!onRequireConfig()) return;
+    if (novel.volumes.length === 0) return;
+
+    setIsEnrichingAll(true);
+    setEnrichError(null);
+
+    try {
+      const { apiKey, model, customBaseUrl, useChatCompletions } = getAiConfig();
+      let currentNovelVolumes = [...novel.volumes];
+
+      for (let i = 0; i < currentNovelVolumes.length; i++) {
+        const vol = currentNovelVolumes[i];
+        if (!vol.chapters || vol.chapters.length === 0) continue;
+
+        const data = await callAiApi('/api/ai/enrich-chapter-summaries', {
+          volume: {
+            id: vol.id,
+            volumeNumber: vol.volumeNumber,
+            volumeTitle: vol.volumeTitle,
+            summary: vol.summary,
+            chapters: vol.chapters.map(c => ({
+              id: c.id,
+              chapterNumber: c.chapterNumber,
+              title: c.title,
+              summary: c.summary,
+              content: c.content,
+              wordCount: c.wordCount,
+              status: c.status
+            }))
+          },
+          novelContext: {
+            title: novel.title,
+            genre: novel.genre,
+            logline: novel.logline,
+            worldBuilding: novel.worldBuilding,
+            characters: novel.characters,
+            tone: novel.tone
+          },
+          instruction: '全面梳理本卷每一章的起承转合，消除所有重复与默认套话，设计精彩多样的章节概要与标题',
+          apiKey,
+          model,
+          customBaseUrl,
+          useChatCompletions
+        });
+
+        if (data.success && Array.isArray(data.chapters) && data.chapters.length > 0) {
+          currentNovelVolumes[i] = {
+            ...vol,
+            chapters: data.chapters
+          };
+        }
+      }
+
+      onUpdateNovel({
+        ...novel,
+        volumes: normalizeNovelChaptersAndTitles(currentNovelVolumes),
+        updatedAt: new Date().toISOString()
+      });
+
+      setEnrichSuccessMsg(`全书各卷章节概要已完成 AI 智能丰富与去重！`);
+      setTimeout(() => setEnrichSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setEnrichError(err.message || '批量丰富章节大纲时出错');
+    } finally {
+      setIsEnrichingAll(false);
+    }
+  };
+
   // Manual Edit Volume submit
   const handleSaveVolumeEdit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -684,6 +838,37 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Toast Notification Banners */}
+      {enrichSuccessMsg && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2.5 text-xs sm:text-sm font-semibold">
+            <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{enrichSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setEnrichSuccessMsg(null)}
+            className="text-emerald-500 hover:text-emerald-700 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {enrichError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2.5 text-xs sm:text-sm font-semibold">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+            <span>{enrichError}</span>
+          </div>
+          <button
+            onClick={() => setEnrichError(null)}
+            className="text-red-500 hover:text-red-700 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Left 2 Cols: Outline View & Volumes List */}
         <div className="lg:col-span-2 space-y-6">
@@ -733,6 +918,21 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
                     <span>归纳新卷</span>
                   </button>
                 </div>
+              )}
+              {novel.volumes.length > 0 && (
+                <button
+                  onClick={handleBatchEnrichAllVolumes}
+                  disabled={isEnrichingAll}
+                  className="inline-flex items-center px-3 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white border border-amber-500/30 text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all space-x-1.5 cursor-pointer disabled:opacity-50"
+                  title="一键调用 AI 检查并为全书所有分卷智能丰富、起承转合、消除所有重复章节剧情大纲"
+                >
+                  {isEnrichingAll ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  ) : (
+                    <Wand2 className="w-4 h-4 text-amber-200" />
+                  )}
+                  <span>{isEnrichingAll ? '正在为全书丰富大纲...' : '✨ 一键 AI 丰富全书各章大纲'}</span>
+                </button>
               )}
               {novel.volumes.length > 1 && (
                 <button
@@ -826,6 +1026,23 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEnrichModalVolume(vol);
+                        setEnrichPrompt('');
+                        setEnrichError(null);
+                      }}
+                      disabled={enrichingVolumeId === vol.id}
+                      className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer space-x-1 disabled:opacity-50"
+                      title="AI 智能补全并细化本卷所有章节大纲，消除重复套话"
+                    >
+                      {enrichingVolumeId === vol.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3.5 h-3.5 text-amber-200" />
+                      )}
+                      <span>{enrichingVolumeId === vol.id ? '正在丰富大纲...' : '✨ AI 丰富各章大纲'}</span>
+                    </button>
                     <button
                       onClick={() => {
                         setRecastingVolume(vol);
@@ -1940,6 +2157,93 @@ export const OutlineView: React.FC<OutlineViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI Enrich Volume Chapters Modal */}
+      {enrichModalVolume && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-stone-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-700 text-white flex items-center justify-center font-bold shadow-xs">
+                  <Wand2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    AI 丰富【第 {enrichModalVolume.volumeNumber} 卷】章节大纲
+                  </h3>
+                  <p className="text-xs text-stone-500 line-clamp-1">
+                    分卷：{enrichModalVolume.volumeTitle}（共 {enrichModalVolume.chapters.length} 章）
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnrichModalVolume(null)}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                  精修或定制指示 (可选，留空将按全书设定智能起承转合)
+                </label>
+                <textarea
+                  rows={3}
+                  value={enrichPrompt}
+                  onChange={(e) => setEnrichPrompt(e.target.value)}
+                  placeholder="例如：重点描写主角与神秘探险队的摩擦；突出底牌突破和境界跃迁；每章都要有独特的冲突和伏笔..."
+                  className="w-full rounded-xl border border-stone-300 p-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none bg-stone-50/50"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed space-y-1">
+                <div className="font-bold flex items-center space-x-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-700 inline" />
+                  <span>AI 智能大纲优化说明：</span>
+                </div>
+                <div>
+                  • 彻底消除章节剧情概要的重复现象，按照 <strong>入局探索 → 矛盾升级 → 高潮对决 → 战后收官</strong> 逐章生成连贯故事脉络。
+                </div>
+                <div>
+                  • 保持章节数量和序号严格不变，已有正文内容的章节将保留正文，仅更新提纲。
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setEnrichModalVolume(null)}
+                disabled={enrichingVolumeId === enrichModalVolume.id}
+                className="px-4 py-2 border border-stone-300 rounded-xl text-stone-700 text-xs font-bold hover:bg-stone-50 transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => handleEnrichVolumeSubmit(enrichModalVolume, enrichPrompt)}
+                disabled={enrichingVolumeId === enrichModalVolume.id}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {enrichingVolumeId === enrichModalVolume.id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI 正在连贯构思中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-4 h-4 text-amber-200" />
+                    <span>✨ 开始一键生成精细大纲</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

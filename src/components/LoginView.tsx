@@ -218,8 +218,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenUsag
       if (newUrl) list.push(`${newUrl}${cleanPath}`);
       if (origUrl) list.push(`${origUrl}${cleanPath}`);
     } else {
-      if (newUrl) list.push(`${newUrl}${cleanPath}`);
       if (origUrl) list.push(`${origUrl}${cleanPath}`);
+      if (newUrl) list.push(`${newUrl}${cleanPath}`);
     }
 
     // 总是包含本域相对路径 (适配容器/全栈 Node 环境)
