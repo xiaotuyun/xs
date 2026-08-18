@@ -672,7 +672,11 @@ app.get("/api/health", (req, res) => {
 
 // Proxy /api/auth/*, /api/feedback/* and /api/admin/* to the Worker
 app.all(["/api/auth/*", "/api/feedback/*", "/api/admin/*"], async (req, res, next) => {
-  let workerUrl = process.env.VITE_WORKER_URL;
+  let workerUrl = (req.body && req.body.cloudWorkerUrl ? String(req.body.cloudWorkerUrl).trim() : '') ||
+                  (req.headers['x-cloud-worker-url'] ? String(req.headers['x-cloud-worker-url']).trim() : '') ||
+                  process.env.VITE_CLOUD_API_URL ||
+                  process.env.VITE_WORKER_URL;
+
   if (!workerUrl) {
     try {
       const workerCode = fs.readFileSync(path.join(process.cwd(), 'worker2.js'), 'utf-8');
@@ -690,7 +694,8 @@ app.all(["/api/auth/*", "/api/feedback/*", "/api/admin/*"], async (req, res, nex
     return next();
   }
 
-  const targetUrl = `${workerUrl}${req.originalUrl}`;
+  const cleanWorkerUrl = workerUrl.replace(/\/+$/, '');
+  const targetUrl = `${cleanWorkerUrl}${req.originalUrl}`;
   
   try {
     // Filter out restricted headers

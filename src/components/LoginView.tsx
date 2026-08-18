@@ -207,19 +207,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenUsag
   }, [showApiModal, apiModalTab]);
 
   // 获取可用于请求的所有 Worker / API 候选 URL 列表
-  const getCandidateApiEndpoints = (path: string, preferNew = false) => {
+  const getCandidateApiEndpoints = (path: string, preferNew = true) => {
     const cleanPath = path.startsWith('/') ? path : '/' + path;
     const list: string[] = [];
 
     const newUrl = cloudApiUrlNew.trim().replace(/\/+$/, '');
     const origUrl = cloudApiUrlOriginal.trim().replace(/\/+$/, '');
 
+    // 优先尝试包含 userdatas 用户数据的 newUrl
     if (preferNew) {
       if (newUrl) list.push(`${newUrl}${cleanPath}`);
       if (origUrl) list.push(`${origUrl}${cleanPath}`);
     } else {
-      if (origUrl) list.push(`${origUrl}${cleanPath}`);
       if (newUrl) list.push(`${newUrl}${cleanPath}`);
+      if (origUrl) list.push(`${origUrl}${cleanPath}`);
     }
 
     // 总是包含本域相对路径 (适配容器/全栈 Node 环境)
@@ -229,7 +230,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenUsag
   };
 
   // 依次尝试所有候选 API 接口，直到某个成功返回 success
-  const tryAuthRequest = async (path: string, body: any, preferNew = false) => {
+  const tryAuthRequest = async (path: string, body: any, preferNew = true) => {
     const candidateEndpoints = getCandidateApiEndpoints(path, preferNew);
     let lastError = '';
     
@@ -514,7 +515,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenUsag
           password: passwordInput.trim(),
           loginType: 'password',
           cloudWorkerUrl: activeWorkerUrl,
-        }, false);
+        }, true);
 
         if (result.ok) {
           const emailValue = emailInput.trim();
