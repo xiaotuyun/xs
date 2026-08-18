@@ -214,13 +214,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenUsag
     const newUrl = cloudApiUrlNew.trim().replace(/\/+$/, '');
     const origUrl = cloudApiUrlOriginal.trim().replace(/\/+$/, '');
 
-    // 优先尝试包含 userdatas 用户数据的 newUrl
+    // 支持双 Worker 候选依次探测，确保两套数据库均可登录
     if (preferNew) {
       if (newUrl) list.push(`${newUrl}${cleanPath}`);
       if (origUrl) list.push(`${origUrl}${cleanPath}`);
     } else {
-      if (newUrl) list.push(`${newUrl}${cleanPath}`);
       if (origUrl) list.push(`${origUrl}${cleanPath}`);
+      if (newUrl) list.push(`${newUrl}${cleanPath}`);
     }
 
     // 总是包含本域相对路径 (适配容器/全栈 Node 环境)
