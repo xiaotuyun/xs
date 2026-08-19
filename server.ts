@@ -2308,15 +2308,13 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
 
     const parsedMin = parseInt(chapterMinWords, 10);
     const parsedMax = parseInt(chapterMaxWords, 10);
-    const minW = !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : 1000;
-    const maxW = !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : 1500;
+    const minW = !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : 4000;
+    const maxW = !isNaN(parsedMax) && parsedMax >= minW ? parsedMax : Math.max(5000, minW + 1000);
 
     const safeTitle = chapterTitle || "章节正文";
     const safeSummary = chapterSummary || "暂无特定剧情大纲";
 
-    const rawCurrent = (currentText && currentText !== "undefined" && currentText !== "null" && String(currentText).trim()) 
-      ? String(currentText).trim() 
-      : ((instruction && instruction !== "undefined" && instruction !== "null" && String(instruction).trim()) ? String(instruction).trim() : "");
+    const rawCurrent = (currentText && currentText !== "undefined" && currentText !== "null") ? String(currentText).trim() : "";
 
     const rawInstruction = (instruction && instruction !== "undefined" && instruction !== "null" && String(instruction).trim()) 
       ? String(instruction).trim() 
@@ -2350,12 +2348,24 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
 
     const userPrompt = `本章标题: ${safeTitle}
 本章剧情大纲: ${safeSummary}
-润色要求指令: ${rawInstruction}
-待润色正文/草稿:
+
+【用户在弹窗输入的润色内容（可同时包含粘贴的草稿段落 + 修改指令/避坑要求）】:
 ---
-${rawCurrent || ("(根据本章大纲《" + safeTitle + "》深入扩写与创作全新正文，目标不少于 " + minW + " 字)")}
+${rawInstruction}
 ---
-请开始输出润色优化后的完整章节正文：`;
+
+【当前编辑器主正文（如有）】:
+---
+${rawCurrent || "(主编辑器当前为空，将完全依据弹窗输入的草稿段落/修改要求与本章大纲创作全篇)"}
+---
+
+【多源融合与智能识别执行规则】：
+1. 智能解析弹窗输入框：如果框内既有故事草稿段落，又有修改指令（例如末尾写着“不要出现...”、“主角是...”等），请自动识别草稿作为核心故事片段，并把修改指令作为最高创作红线！
+2. 将弹窗中的草稿与主编辑器的正文进行有机融合，按照修改指令打磨升级。
+3. 严格执行字数指标：润色优化后的正文纯字数必须**不少于 ${minW} 字**（目标 ${minW} - ${maxW} 字）。若篇幅不够，请深度拓展环境细节、人物动作与多轮对话。
+4. 绝对禁止输出任何“好的”、“已按要求...”等 AI 废话，直接输出纯正小说正文！
+
+请直接开始输出润色扩写后的完整章节正文：`;
 
     const contents = `${systemInstruction}\n\n${userPrompt}`;
     let text = await generateContent(activeKey, activeModel, contents, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
