@@ -171,8 +171,31 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
   const [isContinuing, setIsContinuing] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [polishInstruction, setPolishInstruction] = useState('增强场景代入感与心理描写');
+  const [polishSourceMode, setPolishSourceMode] = useState<'editor' | 'modal'>('editor');
   const [showPolishModal, setShowPolishModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper to clean meta preambles from AI outputs or editor state
+  const cleanPreambleText = (txt: string) => {
+    if (!txt) return '';
+    return txt
+      .replace(/^(?:由于你|由于您|根据你|根据您|基于你|基于您|因为你|因为您|鉴于你|鉴于您)[^\n]*?(?:undefined|未定义|没提供|空白|草稿|大纲|意境)[^\n]*?(?:\n+|$)/gi, '')
+      .replace(/^(?:由于你|由于您)[^\n]*?(?:创作了|生成了|优化了|润色了|开篇|扩充了|正文)[^\n]*?(?:\n+|$)/gi, '')
+      .replace(/^(?:这一章的主题定位在|本章主题定位在|本章的核心定位)[^\n]*?(?:\n+|$)/gi, '')
+      .replace(/^(?:好的|收到|没问题)[，！,\!]*\s*(?:这是|已为您|已为你|我为您|我为你|为您|为你)[^\n]*?(?:\n+|$)/gi, '')
+      .trim();
+  };
+
+  // Open Polish Modal with smart mode selection
+  const handleOpenPolishModal = () => {
+    const cleanedContent = cleanPreambleText(content);
+    if (!cleanedContent || cleanedContent.includes('undefined') || content.includes('由于你') || content.includes('由于您')) {
+      setPolishSourceMode('modal');
+    } else {
+      setPolishSourceMode('editor');
+    }
+    setShowPolishModal(true);
+  };
 
   // Word count range states
   const [tempMinWords, setTempMinWords] = useState(novel.chapterMinWords ?? 2000);
@@ -320,7 +343,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
       if (!data.success) throw new Error(data.error || '生成失败');
 
-      setContent(data.content);
+      setContent(cleanPreambleText(data.content));
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'AI 生成正文失败');
@@ -348,7 +371,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
       };
 
       const data = await callAiApi('/api/ai/continue-chapter', {
-        currentText: content,
+        currentText: cleanPreambleText(content),
         chapterSummary: summary,
         novelContext: fullNovelContext,
         apiKey,
@@ -363,7 +386,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
       if (!data.success) throw new Error(data.error || '续写失败');
 
-      setContent((prev) => (prev ? prev + '\n\n' + data.content : data.content));
+      const cleanedPiece = cleanPreambleText(data.content);
+      setContent((prev) => {
+        const cleanedPrev = cleanPreambleText(prev);
+        return cleanedPrev ? cleanedPrev + '\n\n' + cleanedPiece : cleanedPiece;
+      });
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'AI 续写失败');
@@ -376,9 +403,23 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
   const handleAiPolish = async () => {
     if (!currentChap) return;
     
-    // 如果主正文和弹窗输入均为空，提示输入
-    const effectiveText = (content && content.trim()) ? content.trim() : (polishInstruction && polishInstruction.trim() ? polishInstruction.trim() : '');
-    if (!effectiveText && !summary.trim()) {
+    let textToSend = '';
+    let instructionToSend = polishInstruction.trim();
+
+    if (polishSourceMode === 'modal' && polishInstruction.trim()) {
+      textToSend = cleanPreambleText(polishInstruction.trim());
+      instructionToSend = '以此草稿段落为核心，精修词句、增强动作环境与对话张力，并深度拓展为完整高质量章节';
+    } else {
+      const cleanedEditor = cleanPreambleText(content);
+      if (cleanedEditor) {
+        textToSend = cleanedEditor;
+      } else if (polishInstruction.trim()) {
+        textToSend = cleanPreambleText(polishInstruction.trim());
+        instructionToSend = '精修并拓展为完整高质量章节';
+      }
+    }
+
+    if (!textToSend && !summary.trim()) {
       setError('请输入待润色的正文或在上方填写本章剧情大纲，AI 才能为您进行精雕细琢！');
       setShowPolishModal(false);
       return;
@@ -401,12 +442,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
       };
 
       const data = await callAiApi('/api/ai/polish-chapter', {
-        currentText: effectiveText,
+        currentText: textToSend,
         chapterTitle: title || currentChap.title,
         chapterSummary: summary || currentChap.summary,
         chapterNumber: currentChap.chapterNumber,
         currentVolumeTitle,
-        instruction: polishInstruction.trim() || '增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力',
+        instruction: instructionToSend || '增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力',
         chapterMinWords: tempMinWords,
         chapterMaxWords: tempMaxWords,
         novelContext: fullNovelContext,
@@ -418,7 +459,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
       if (!data.success) throw new Error(data.error || '润色失败');
 
-      setContent(data.content);
+      const finalClean = cleanPreambleText(data.content);
+      setContent(finalClean);
       setShowPolishModal(false);
       setPolishInstruction('');
     } catch (err: any) {
@@ -825,7 +867,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
               </button>
 
               <button
-                onClick={() => setShowPolishModal(true)}
+                onClick={handleOpenPolishModal}
                 className="w-full py-2.5 px-4 bg-stone-100 hover:bg-stone-200 text-stone-800 text-sm font-medium rounded-xl transition-colors flex items-center justify-center space-x-2"
               >
                 <RefreshCw className="w-4 h-4 text-stone-600" />
@@ -843,9 +885,41 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
             <h3 className="font-bold text-stone-900 text-lg">AI 润色与文风优化</h3>
             <p className="text-xs text-stone-500">
               {content && content.trim() 
-                ? `已加载当前正文（共 ${getPureWordCount(content)} 字）。请输入具体优化方向或风格要求：`
-                : `当前正文尚未生成。您可在此直接输入草稿片段或优化要求，AI 将结合《${title || '本章'}》大纲精修扩写为完整章节：`}
+                ? `已加载当前正文（共 ${getPureWordCount(cleanPreambleText(content))} 字）。请选择润色模式或输入具体优化要求：`
+                : `当前正文尚未生成。您可在此直接粘贴草稿片段，AI 将结合《${title || '本章'}》大纲精修扩写为完整章节：`}
             </p>
+
+            {content && content.trim() && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-stone-700 block">选择待润色内容来源：</label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPolishSourceMode('editor')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                      polishSourceMode === 'editor'
+                        ? 'border-amber-600 bg-amber-50 text-amber-950 font-semibold ring-1 ring-amber-600'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>📖 主正文区内容</span>
+                    <span className="text-[10px] text-stone-400 font-normal mt-1">润色已选章节当前正文</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPolishSourceMode('modal')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                      polishSourceMode === 'modal'
+                        ? 'border-amber-600 bg-amber-50 text-amber-950 font-semibold ring-1 ring-amber-600'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>✍️ 弹窗粘贴的草稿/段落</span>
+                    <span className="text-[10px] text-stone-400 font-normal mt-1">以此框输入的草稿为准全量润色</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-1">
               <div className="font-bold flex items-center space-x-1.5">
@@ -861,9 +935,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
               rows={4}
               value={polishInstruction}
               onChange={(e) => setPolishInstruction(e.target.value)}
-              placeholder={content && content.trim() 
-                ? "例如：增强对话的张力、增加环境细节描写、精简冗余词句、提升场景代入感..."
-                : "可在此直接输入您的润色指令、文风偏好或草稿段落..."}
+              placeholder={polishSourceMode === 'modal' 
+                ? "请在此粘贴您的草稿段落，AI 将以此草稿为核心精炼拓展..."
+                : "例如：增强对话的张力、增加环境细节描写、精简冗余词句、提升场景代入感..."}
               className="w-full rounded-xl border border-stone-300 p-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-y"
             />
 

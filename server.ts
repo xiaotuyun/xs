@@ -1274,9 +1274,10 @@ function cleanNovelContent(rawText: any): string {
     /^(?:Title|Summary|Scene|Content)\s*[:：]\s*/i,
     /^(?:Here is (?:a|the) (?:continuation|draft|scene))[^:\n]*[:：]?\s*/i,
     /^Okay,?\s*(?:here is|I will|let's)[^:\n]*[:：]?\s*/i,
-    /^(?:由于您|根据您|基于您|因为您|鉴于您)[^\n]*?(?:undefined|未定义|没提供|空白|草稿|大纲)[^\n]*?(?:\n+|$)/i,
-    /^(?:由于您[^\n]*?(?:创作了|生成了|优化了|润色了|开篇)[^\n]*?(?:\n+|$))+/i,
-    /^(?:好的|收到|没问题)[，！,\!]*\s*(?:这是|已为您|我为您|为您)[^\n]*?(?:\n+|$)/i,
+    /^(?:由于你|由于您|根据你|根据您|基于你|基于您|因为你|因为您|鉴于你|鉴于您)[^\n]*?(?:undefined|未定义|没提供|空白|草稿|大纲|意境)[^\n]*?(?:\n+|$)/i,
+    /^(?:由于你|由于您)[^\n]*?(?:创作了|生成了|优化了|润色了|开篇|扩充了|正文)[^\n]*?(?:\n+|$)/i,
+    /^(?:这一章的主题定位在|本章主题定位在|本章的核心定位)[^\n]*?(?:\n+|$)/i,
+    /^(?:好的|收到|没问题)[，！,\!]*\s*(?:这是|已为您|已为你|我为您|我为你|为您|为你)[^\n]*?(?:\n+|$)/i,
   ];
 
   let cleaned = true;
@@ -2368,33 +2369,33 @@ ${rawCurrent || ("(根据本章大纲《" + safeTitle + "》深入扩写与创�
 
     while (currentWords < minW && loopCount < maxLoops) {
       loopCount++;
-      console.log(`[Polish Chapter] Word count (${currentWords}) < minWords (${minW}). Initiating expansion pass ${loopCount}...`);
+      console.log(`[Polish Chapter] Word count (${currentWords}) < minWords (${minW}). Initiating continuation pass ${loopCount}...`);
       
       const remainNeeded = minW - currentWords;
-      const expandPrompt = `你正在润色扩写网络小说《${novelContext?.title || "小说"}》章节《${safeTitle}》正文。
-用户要求的润色指令：${rawInstruction}
+      const expandPrompt = `你正在撰写扩充网络小说《${novelContext?.title || "小说"}》章节《${safeTitle}》正文。
+本章大纲：${safeSummary}
 
-【当前已润色的正文】（纯字数：${currentWords}字，距离设定最低字数 ${minW}字 还差 ${remainNeeded}字）：
+【上文已完成正文片段】（当前纯字数：${currentWords}字，保底字数目标：${minW}字）：
 ---
-${fullContent}
+${fullContent.slice(-1800)}
 ---
 
-【深度扩写与章节完善指令】：
-当前字数（${currentWords}字）尚未达到设定的保底字数（${minW}字）！
-请对上述正文进行【多维度深度扩写与修辞升华】：
-1. 100% 必须全程使用纯正简体中文撰写，严禁包含任何前言解释或总结套话。
-2. 扩展场景环境熏陶、天地灵气感应与功法运行的宏大细节。
-3. 增加人物内心波澜、修仙道心感悟与精细微动作。
-4. 充实生动的多轮对话与心理对立冲突，将故事推向高潮。
-5. 保持整体逻辑顺畅，将上述正文大幅扩充为不少于 ${minW} 字的长章节。
-请直接输出扩充优化后的完整正文：`;
+【无缝接续与情节深化强指令】：
+当前章节字数（${currentWords}字）尚未达到保底要求的 ${minW} 字！
+请紧接着上文结尾的剧情与氛围，**无缝接续往下撰写新的章节情节与细化场景**：
+1. 100% 全程使用纯正地道简体中文撰写，严禁包含任何“好的”、“这是”等寒暄套话或 Markdown 标记。
+2. 丰富自然的人性化对话、心理激荡、功法运行与天地灵气环境感应。
+3. 保持与上文完全一致的语气、人设与文风，顺理成章地推进故事发展。
+4. 本次续写只需接续增加约 ${remainNeeded + 200} 字。
+请直接输出接续的新正文段落（无需重复上文）：`;
 
-      const expandedPiece = await generateContent(activeKey, activeModel, expandPrompt, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
-      if (expandedPiece && expandedPiece.trim()) {
-        const cleanPiece = cleanNovelContent(expandedPiece);
-        const newWordCount = countPureWords(cleanPiece);
-        if (newWordCount > currentWords) {
-          fullContent = cleanPiece;
+      const continuePiece = await generateContent(activeKey, activeModel, expandPrompt, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
+      if (continuePiece && continuePiece.trim()) {
+        const cleanPiece = cleanNovelContent(continuePiece);
+        if (cleanPiece) {
+          fullContent += "\n\n" + cleanPiece;
+          const newWordCount = countPureWords(fullContent);
+          if (newWordCount <= currentWords) break;
           currentWords = newWordCount;
         } else {
           break;
