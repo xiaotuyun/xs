@@ -1266,20 +1266,23 @@ function cleanNovelContent(rawText: any): string {
   // 3. Strip Markdown code fences
   text = text.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
 
-  // 4. Strip English conversational preambles/fillers at the beginning of the text
-  const englishPreamblePatterns = [
+  // 4. Strip English & Chinese conversational preambles/fillers at the beginning of the text
+  const preamblePatterns = [
     /^(?:Sure(?: thing)?[!.,]?|Certainly[!.,]?|Of course[!.,]?|Here(?:'s| is) (?:the |your )?(?:chapter|continuation|story|novel|text|polished version|revised chapter|response)[^:\n]*[:：]?)\s*/i,
     /^(?:Here is the translated|Here is the generated|Here is what happens next|Below is the chapter|Following is the chapter)[^:\n]*[:：]?\s*/i,
     /^(?:Chapter\s*\d+[^:\n]*[:：]?)\s*/i,
     /^(?:Title|Summary|Scene|Content)\s*[:：]\s*/i,
     /^(?:Here is (?:a|the) (?:continuation|draft|scene))[^:\n]*[:：]?\s*/i,
     /^Okay,?\s*(?:here is|I will|let's)[^:\n]*[:：]?\s*/i,
+    /^(?:由于您|根据您|基于您|因为您|鉴于您)[^\n]*?(?:undefined|未定义|没提供|空白|草稿|大纲)[^\n]*?(?:\n+|$)/i,
+    /^(?:由于您[^\n]*?(?:创作了|生成了|优化了|润色了|开篇)[^\n]*?(?:\n+|$))+/i,
+    /^(?:好的|收到|没问题)[，！,\!]*\s*(?:这是|已为您|我为您|为您)[^\n]*?(?:\n+|$)/i,
   ];
 
   let cleaned = true;
   while (cleaned) {
     cleaned = false;
-    for (const pat of englishPreamblePatterns) {
+    for (const pat of preamblePatterns) {
       if (pat.test(text)) {
         text = text.replace(pat, '').trim();
         cleaned = true;
@@ -2310,6 +2313,14 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
     const safeTitle = chapterTitle || "章节正文";
     const safeSummary = chapterSummary || "暂无特定剧情大纲";
 
+    const rawCurrent = (currentText && currentText !== "undefined" && currentText !== "null" && String(currentText).trim()) 
+      ? String(currentText).trim() 
+      : ((instruction && instruction !== "undefined" && instruction !== "null" && String(instruction).trim()) ? String(instruction).trim() : "");
+
+    const rawInstruction = (instruction && instruction !== "undefined" && instruction !== "null" && String(instruction).trim()) 
+      ? String(instruction).trim() 
+      : "增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力";
+
     const systemInstruction = `你是一位资深网文主编和顶级文学修辞大师，擅长正文润色、文风升级与剧情细节雕琢。
 小说信息:
 书名: 《${novelContext?.title || "网络小说"}》
@@ -2338,10 +2349,10 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
 
     const userPrompt = `本章标题: ${safeTitle}
 本章剧情大纲: ${safeSummary}
-润色要求指令: ${instruction || "增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力"}
-原文正文内容:
+润色要求指令: ${rawInstruction}
+待润色正文/草稿:
 ---
-${currentText || "(当前正文内容待根据本章大纲《" + safeTitle + "》进行全面扩写与创作)"}
+${rawCurrent || ("(根据本章大纲《" + safeTitle + "》深入扩写与创作全新正文，目标不少于 " + minW + " 字)")}
 ---
 请开始输出润色优化后的完整章节正文：`;
 
@@ -2353,30 +2364,30 @@ ${currentText || "(当前正文内容待根据本章大纲《" + safeTitle + "�
     let fullContent = text;
     let currentWords = countPureWords(fullContent);
     let loopCount = 0;
-    const maxLoops = 3;
+    const maxLoops = 4;
 
     while (currentWords < minW && loopCount < maxLoops) {
       loopCount++;
       console.log(`[Polish Chapter] Word count (${currentWords}) < minWords (${minW}). Initiating expansion pass ${loopCount}...`);
       
       const remainNeeded = minW - currentWords;
-      const expandPrompt = `你正在润色扩写网络小说《${novelContext?.title || "小说"}》章节正文。
-用户要求的润色指令：${instruction || "细化描写与增强张力"}
+      const expandPrompt = `你正在润色扩写网络小说《${novelContext?.title || "小说"}》章节《${safeTitle}》正文。
+用户要求的润色指令：${rawInstruction}
 
 【当前已润色的正文】（纯字数：${currentWords}字，距离设定最低字数 ${minW}字 还差 ${remainNeeded}字）：
 ---
 ${fullContent}
 ---
 
-【扩写与打磨强指令】：
-当前字数尚未达到设定的最低字数要求（${minW}字）。
-请对上述正文进行【深入细节扩充与全方位细化】：
-1. 必须 100% 全程使用纯正简体中文撰写，严禁任何英文。
-2. 深入扩展每一个主要场景的宏大氛围描写、光影细节与环境冲击。
-3. 丰富人物心理活动、五感体验与言谈神情细节。
-4. 增加更多有张力的人物交锋对话与微动作。
-5. 保持剧情脉络不变，将正文拓展为一篇不少于 ${minW} 字的完整高质量长章节。
-6. 请直接输出扩充润色后的完整正文：`;
+【深度扩写与章节完善指令】：
+当前字数（${currentWords}字）尚未达到设定的保底字数（${minW}字）！
+请对上述正文进行【多维度深度扩写与修辞升华】：
+1. 100% 必须全程使用纯正简体中文撰写，严禁包含任何前言解释或总结套话。
+2. 扩展场景环境熏陶、天地灵气感应与功法运行的宏大细节。
+3. 增加人物内心波澜、修仙道心感悟与精细微动作。
+4. 充实生动的多轮对话与心理对立冲突，将故事推向高潮。
+5. 保持整体逻辑顺畅，将上述正文大幅扩充为不少于 ${minW} 字的长章节。
+请直接输出扩充优化后的完整正文：`;
 
       const expandedPiece = await generateContent(activeKey, activeModel, expandPrompt, 0.75, customBaseUrl, useChatCompletions, 8192, config.selectedModels);
       if (expandedPiece && expandedPiece.trim()) {
