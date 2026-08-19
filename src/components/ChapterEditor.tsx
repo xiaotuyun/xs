@@ -375,11 +375,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
   // 3. Polish Chapter
   const handleAiPolish = async () => {
     if (!currentChap) return;
-    if (!content || !content.trim()) {
-      setError('当前正文内容为空！AI 润色优化需要基于已有的章节初稿进行精修。请先点击【AI 一键生成本章正文】生成初稿，或手动输入正文后再使用润色功能。');
+    
+    // 如果主正文和弹窗输入均为空，提示输入
+    const effectiveText = (content && content.trim()) ? content.trim() : (polishInstruction && polishInstruction.trim() ? polishInstruction.trim() : '');
+    if (!effectiveText && !summary.trim()) {
+      setError('请输入待润色的正文或在上方填写本章剧情大纲，AI 才能为您进行精雕细琢！');
       setShowPolishModal(false);
       return;
     }
+
     if (!onRequireConfig()) return;
     setIsPolishing(true);
     setError(null);
@@ -397,12 +401,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
       };
 
       const data = await callAiApi('/api/ai/polish-chapter', {
-        currentText: content,
+        currentText: effectiveText,
         chapterTitle: title || currentChap.title,
         chapterSummary: summary || currentChap.summary,
         chapterNumber: currentChap.chapterNumber,
         currentVolumeTitle,
-        instruction: polishInstruction,
+        instruction: polishInstruction.trim() || '增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力',
         chapterMinWords: tempMinWords,
         chapterMaxWords: tempMaxWords,
         novelContext: fullNovelContext,
@@ -416,6 +420,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
 
       setContent(data.content);
       setShowPolishModal(false);
+      setPolishInstruction('');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'AI 润色失败');
@@ -836,7 +841,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
         <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="font-bold text-stone-900 text-lg">AI 润色与文风优化</h3>
-            <p className="text-xs text-stone-500">输入您的润色需求，AI 将为您对当前正文进行精雕细琢并确保篇幅达标。</p>
+            <p className="text-xs text-stone-500">
+              {content && content.trim() 
+                ? `已加载当前正文（共 ${getPureWordCount(content)} 字）。请输入具体优化方向或风格要求：`
+                : `当前正文尚未生成。您可在此直接输入草稿片段或优化要求，AI 将结合《${title || '本章'}》大纲精修扩写为完整章节：`}
+            </p>
 
             <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-1">
               <div className="font-bold flex items-center space-x-1.5">
@@ -849,11 +858,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
             </div>
 
             <textarea
-              rows={3}
+              rows={4}
               value={polishInstruction}
               onChange={(e) => setPolishInstruction(e.target.value)}
-              placeholder="例如：增强对话的张力、增加环境细节描写、精简冗余词句..."
-              className="w-full rounded-xl border border-stone-300 p-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-none"
+              placeholder={content && content.trim() 
+                ? "例如：增强对话的张力、增加环境细节描写、精简冗余词句、提升场景代入感..."
+                : "可在此直接输入您的润色指令、文风偏好或草稿段落..."}
+              className="w-full rounded-xl border border-stone-300 p-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-y"
             />
 
             <div className="flex justify-end space-x-3 pt-2">
