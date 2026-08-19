@@ -2591,6 +2591,66 @@ app.post("/api/storage/sync-chapter", (req, res) => {
   }
 });
 
+// 批量一键全量同步所有小说到硬盘
+app.post("/api/storage/sync-all", (req, res) => {
+  try {
+    const { storagePath, novels } = req.body;
+    const effectiveStorage = (storagePath && String(storagePath).trim()) ? String(storagePath).trim() : "storage";
+    const resolvedStorage = safeResolve(effectiveStorage);
+    
+    if (!fs.existsSync(resolvedStorage)) {
+      fs.mkdirSync(resolvedStorage, { recursive: true });
+    }
+
+    const novelsList = Array.isArray(novels) ? novels : [];
+    let syncedChaptersCount = 0;
+    let syncedNovelsCount = 0;
+
+    for (const novel of novelsList) {
+      if (!novel || !novel.title) continue;
+      const safeNovelFolder = novel.title.replace(/[\/\\:\*\?"<>\|]/g, "_").trim();
+      const novelDirPath = path.join(resolvedStorage, safeNovelFolder);
+
+      if (!fs.existsSync(novelDirPath)) {
+        fs.mkdirSync(novelDirPath, { recursive: true });
+      }
+
+      // 保存小说结构 JSON 备份
+      const jsonFilePath = path.join(novelDirPath, `${safeNovelFolder}.json`);
+      fs.writeFileSync(jsonFilePath, JSON.stringify(novel, null, 2), "utf8");
+
+      // 遍历保存各章节 TXT
+      let globalChapIndex = 1;
+      const volumes = Array.isArray(novel.volumes) ? novel.volumes : [];
+      for (const vol of volumes) {
+        const chapters = Array.isArray(vol.chapters) ? vol.chapters : [];
+        for (const chap of chapters) {
+          const chapTitle = chap.title || `第${globalChapIndex}章`;
+          const safeChapFile = `第${globalChapIndex}章-${chapTitle.replace(/[\/\\:\*\?"<>\|]/g, "_").trim()}.txt`;
+          const chapFilePath = path.join(novelDirPath, safeChapFile);
+
+          if (chapFilePath.startsWith(process.cwd())) {
+            fs.writeFileSync(chapFilePath, chap.content || "", "utf8");
+            syncedChaptersCount++;
+          }
+          globalChapIndex++;
+        }
+      }
+      syncedNovelsCount++;
+    }
+
+    res.json({
+      success: true,
+      novelsCount: syncedNovelsCount,
+      chaptersCount: syncedChaptersCount,
+      storagePath: path.relative(process.cwd(), resolvedStorage),
+    });
+  } catch (error: any) {
+    console.error("Batch sync all error:", error);
+    res.status(500).json({ success: false, error: error.message || "全量同步失败" });
+  }
+});
+
 app.get("/api/storage/read-file", (req, res) => {
   try {
     const userPath = String(req.query.path || "");

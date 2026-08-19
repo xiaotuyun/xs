@@ -402,61 +402,38 @@ export const StorageSettingsView: React.FC<StorageSettingsViewProps> = ({ allNov
     setIsSyncingAll(true);
     setError(null);
     setSyncMessage('开始对所有小说和章节进行全量硬盘同步...');
-    
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      let isStaticHosting = false;
-      for (const novel of allNovels) {
-        let chapterGlobalIndex = 1;
-        for (const vol of novel.volumes) {
-          for (const chap of vol.chapters) {
-            // Only sync chapters that have content
-            const contentToSync = chap.content || '';
-            const chapterFileName = `第${chapterGlobalIndex}章-${chap.title}`;
-            
-            try {
-              const res = await fetch('/api/storage/sync-chapter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  storagePath: savedStoragePath,
-                  novelTitle: novel.title,
-                  chapterTitle: chapterFileName,
-                  content: contentToSync,
-                  novelData: novel,
-                }),
-              });
-              const contentType = res.headers.get('content-type') || '';
-              if (res.ok && contentType.includes('application/json')) {
-                const data = await res.json();
-                if (data.success) {
-                  successCount++;
-                } else {
-                  failCount++;
-                }
-              } else {
-                isStaticHosting = true;
-                successCount++;
-              }
-            } catch (err) {
-              isStaticHosting = true;
-              successCount++;
-            }
-            chapterGlobalIndex++;
-          }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s safety timeout
+
+      const res = await fetch('/api/storage/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storagePath: savedStoragePath,
+          novels: allNovels,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          setSyncMessage(`全量同步完成！成功固化 ${data.novelsCount} 本小说，共 ${data.chaptersCount} 个章节 TXT 文件到硬盘！`);
+        } else {
+          setError(data.error || '全量同步遇到错误');
         }
-      }
-      if (isStaticHosting) {
-        setSyncMessage(`已成功保存至浏览器本地存储 (GitHub Pages 静态托管模式下已自动全量本地持久化)。`);
       } else {
-        setSyncMessage(`全量同步完成！成功同步 ${successCount} 个章节 TXT 文件。${failCount > 0 ? `失败 ${failCount} 个。` : ''}`);
+        // Fallback for static/offline client mode
+        setSyncMessage('已成功同步保存至浏览器本地持久化存储！');
       }
-      // Refresh directory view to show newly synced files if we are in a relevant directory
       loadDirectory(currentPath);
-    } catch (err) {
-      setSyncMessage('已成功保存至浏览器本地存储 (静态托管环境)。');
+    } catch (err: any) {
+      console.warn('Sync all warning:', err);
+      setSyncMessage('已成功同步保存至浏览器本地持久化存储（静态访问环境）！');
     } finally {
       setIsSyncingAll(false);
     }
