@@ -2290,7 +2290,7 @@ ${previousChapterContext.prevContentSnippet}
 app.post("/api/ai/polish-chapter", async (req, res) => {
   try {
     const config = getEffectiveAiConfig(req.body);
-    const { currentText, instruction, chapterMinWords, chapterMaxWords, novelContext } = req.body;
+    const { currentText, instruction, chapterMinWords, chapterMaxWords, novelContext, chapterTitle, chapterSummary, chapterNumber, currentVolumeTitle } = req.body;
     if (!config.apiKey) {
       return res.status(400).json({ success: false, error: "未配置 API Key，请先在右上角【设置】进行配置或在环境变量中指定。" });
     }
@@ -2307,17 +2307,25 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
     const minW = !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : 1000;
     const maxW = !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : 1500;
 
+    const safeTitle = chapterTitle || "章节正文";
+    const safeSummary = chapterSummary || "暂无特定剧情大纲";
+
     const systemInstruction = `你是一位资深网文主编和顶级文学修辞大师，擅长正文润色、文风升级与剧情细节雕琢。
 小说信息:
-书名: 《${novelContext?.title || "未知小说"}》
+书名: 《${novelContext?.title || "网络小说"}》
 流派: ${novelContext?.genre || "奇幻"}
 基调: ${novelContext?.tone || "热血爽快、逻辑严密、节奏紧凑"}
+所属分卷: ${currentVolumeTitle || "正卷"}
+章节序号: 第 ${chapterNumber || 1} 章
+章节标题: ${safeTitle}
+本章剧情概要/大纲: ${safeSummary}
 
 【最高语言指令 - 100%纯简体中文】:
-润色扩写后的正文必须【100%全程使用纯正、地道、优美的简体中文撰写】！绝对严禁输出任何英文前缀、英文解释或中英混杂！
+润色优化后的正文必须【100%全程使用纯正、地道、优美的简体中文撰写】！绝对严禁输出任何英文前缀、英文解释或中英混杂！
+绝对禁止在输出内容中包含任何与小说正文无关的AI寒暄、自我解释（例如“由于您提供了...”、“这是为您创作的...”等），请直接输出纯正的小说章节正文！
 
 【润色与字数核心标准】：
-1. 完整保留原文的核心剧情发展、主要对话与关键事件，不得遗漏关键转折或随意改动剧情主线。
+1. 紧扣本章标题《${safeTitle}》与剧情概要，完整保留原文的核心剧情脉络与关键人物事件，优化遣词造句与行文节奏。
 2. 字数限制要求：润色优化后的完整章节正文，其纯字数（仅计算汉字、英文字母及数字，不含标点符号与空白符）必须**绝对大于或等于 ${minW} 字**（目标 ${minW} 到 ${maxW} 字）。
 3. 若原文篇幅较短或未达 ${minW} 字标准：
    - 必须通过拓展多视角的环境描写、气氛熏陶、人物微表情、心理活动与感官细节来精细扩充。
@@ -2328,10 +2336,12 @@ app.post("/api/ai/polish-chapter", async (req, res) => {
 牢记：生成的纯字数少于 ${minW} 字是严重的失职！请务必细致入微地描写打磨，确保字数与质量全面达标。
 请直接输出润色优化后的完整正文（无需 markdown 代码块包裹）。`;
 
-    const userPrompt = `润色要求指令: ${instruction || "增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力"}
+    const userPrompt = `本章标题: ${safeTitle}
+本章剧情大纲: ${safeSummary}
+润色要求指令: ${instruction || "增强代入感与场面感，使描写更加细腻流畅，提升文采与动作对话张力"}
 原文正文内容:
 ---
-${currentText || ""}
+${currentText || "(当前正文内容待根据本章大纲《" + safeTitle + "》进行全面扩写与创作)"}
 ---
 请开始输出润色优化后的完整章节正文：`;
 

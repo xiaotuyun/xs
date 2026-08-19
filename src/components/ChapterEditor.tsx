@@ -375,6 +375,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
   // 3. Polish Chapter
   const handleAiPolish = async () => {
     if (!currentChap) return;
+    if (!content || !content.trim()) {
+      setError('当前正文内容为空！AI 润色优化需要基于已有的章节初稿进行精修。请先点击【AI 一键生成本章正文】生成初稿，或手动输入正文后再使用润色功能。');
+      setShowPolishModal(false);
+      return;
+    }
     if (!onRequireConfig()) return;
     setIsPolishing(true);
     setError(null);
@@ -388,10 +393,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
         logline: novel.logline,
         worldBuilding: novel.worldBuilding,
         characters: novel.characters,
+        tone: novel.tone,
       };
 
       const data = await callAiApi('/api/ai/polish-chapter', {
         currentText: content,
+        chapterTitle: title || currentChap.title,
+        chapterSummary: summary || currentChap.summary,
+        chapterNumber: currentChap.chapterNumber,
+        currentVolumeTitle,
         instruction: polishInstruction,
         chapterMinWords: tempMinWords,
         chapterMaxWords: tempMaxWords,
